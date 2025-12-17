@@ -27,7 +27,12 @@ class SqlGlotExtractor(BaseExtractor):
         # 2. Parse SQL
         # Pre-process: Split by 'GO' (case insensitive) on its own line
         # Regex: ^\s*GO\s*$ (multiline)
-        batches = re.split(r'^\s*GO\s*$', content, flags=re.MULTILINE | re.IGNORECASE)
+        
+        # Clean up potential non-standard comments (like # in some T-SQL scripts if exported weirdly)
+        # Standard SQL uses --, but let's be safe if we see # at start of line
+        clean_content = re.sub(r'^\s*#.*$', '', content, flags=re.MULTILINE)
+        
+        batches = re.split(r'^\s*GO\s*$', clean_content, flags=re.MULTILINE | re.IGNORECASE)
         
         dialect = "tsql" 
         
@@ -37,13 +42,20 @@ class SqlGlotExtractor(BaseExtractor):
                 
             try:
                 # parse returns a list of expressions
+                # We strictly ask for T-SQL dialect
                 parsed_statements = sqlglot.parse(batch, read=dialect)
                 for stmt in parsed_statements:
                     self._analyze_statement(stmt, file_path, content, file_node_id, nodes, edges, evidences)
             except Exception as e:
-                print(f"SqlGlot parse error in {file_path}: {e}")
-                # We continue with next batch/statement
-                continue
+                # Try fallback to "postgres" if tsql fails, sometimes it helps with generic SQL
+                try:
+                     parsed_statements = sqlglot.parse(batch, read="postgres")
+                     for stmt in parsed_statements:
+                        self._analyze_statement(stmt, file_path, content, file_node_id, nodes, edges, evidences)
+                except:
+                    print(f"SqlGlot parse error in {file_path}: {e}")
+                    # We continue with next batch/statement
+                    continue
 
         # Deduplicate
         unique_nodes = {n.node_id: n for n in nodes}.values()
