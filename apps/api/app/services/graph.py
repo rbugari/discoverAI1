@@ -19,6 +19,14 @@ class GraphService(ABC):
     def get_graph_data(self, solution_file_path: str):
         pass
 
+    @abstractmethod
+    def get_subgraph(self, center_id: str, depth: int, limit: int):
+        pass
+
+    @abstractmethod
+    def find_paths(self, from_id: str, to_id: str, max_hops: int):
+        pass
+
 class MockGraphService(GraphService):
     def __init__(self):
         print("Initialized Mock Graph Service (In-Memory)")
@@ -35,11 +43,16 @@ class MockGraphService(GraphService):
 
     def delete_solution_nodes(self, solution_id: str):
         print(f"[MOCK GRAPH] Deleting nodes for solution {solution_id}")
-        # Mock implementation: just filter out nodes with this solution_id if we were storing it
         pass
 
     def get_graph_data(self, solution_file_path: str):
         return {"nodes": self.nodes, "edges": self.relationships}
+        
+    def get_subgraph(self, center_id: str, depth: int, limit: int):
+        return {"nodes": self.nodes, "edges": self.relationships} # Mock returns all
+        
+    def find_paths(self, from_id: str, to_id: str, max_hops: int):
+        return [] # Mock returns empty
 
 import time
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
@@ -101,23 +114,13 @@ class Neo4jGraphService(GraphService):
         self._run_query_with_retry(query, params={"solution_id": solution_id})
         print(f"[NEO4J] Deleted nodes for solution {solution_id}")
 
-    def get_graph_data(self, solution_id: str):
-        # Fetch all nodes and relationships CONNECTED to this solution
-        # NOTE: Currently we are filtering by solution_id in the property of the node
-        
-        query = """
-        MATCH (n)-[r]->(m)
-        WHERE n.solution_id = $solution_id OR m.solution_id = $solution_id
-        RETURN n, r, m
-        LIMIT 5000
-        """
-        
+    def _process_graph_query(self, query, params):
         nodes = {}
         edges = []
         
         try:
-            records = self._run_query_with_retry(query, params={"solution_id": solution_id})
-            print(f"[NEO4J] Found {len(records)} records for solution {solution_id}")
+            records = self._run_query_with_retry(query, params=params)
+            print(f"[NEO4J] Found {len(records)} records")
             
             for record in records:
                 n = record["n"]
@@ -173,11 +176,37 @@ class Neo4jGraphService(GraphService):
                 })
         except Exception as e:
             print(f"[NEO4J ERROR] {e}")
-            # Try to reconnect or handle session expiration
-            # For now, just return empty list but log clearly
             return {"nodes": [], "edges": []}
                 
         return {"nodes": list(nodes.values()), "edges": edges}
+
+    def get_graph_data(self, solution_id: str):
+        query = """
+        MATCH (n)-[r]->(m)
+        WHERE n.solution_id = $solution_id OR m.solution_id = $solution_id
+        RETURN n, r, m
+        LIMIT 5000
+        """
+        return self._process_graph_query(query, params={"solution_id": solution_id})
+
+    def get_subgraph(self, center_id: str, depth: int, limit: int):
+        query = f"""
+        MATCH p = (n {{id: $center_id}})-[*1..{depth}]-(m)
+        UNWIND relationships(p) AS rel
+        WITH startNode(rel) AS a, rel, endNode(rel) AS b
+        RETURN a AS n, rel AS r, b AS m
+        LIMIT {limit}
+        """
+        return self._process_graph_query(query, params={"center_id": center_id})
+
+    def find_paths(self, from_id: str, to_id: str, max_hops: int):
+        query = f"""
+        MATCH p = shortestPath((a {{id: $from_id}})-[*..{max_hops}]-(b {{id: $to_id}}))
+        UNWIND relationships(p) AS rel
+        WITH startNode(rel) AS a, rel, endNode(rel) AS b
+        RETURN a AS n, rel AS r, b AS m
+        """
+        return self._process_graph_query(query, params={"from_id": from_id, "to_id": to_id})
 
 def get_graph_service() -> GraphService:
     print(f"[GRAPH SERVICE] Mode: {settings.GRAPH_MODE}")

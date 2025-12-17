@@ -8,6 +8,10 @@ async def register_test_solution():
     
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
     
+    # 0. Cleanup (Optional)
+    # print("Cleaning old test solutions...")
+    # supabase.from_('solutions').delete().ilike('name', '%Test Run%').execute()
+
     # 1. Get or Create Organization
     org_id = ''
     orgs = supabase.from_('organizations').select('id').limit(1).execute()
@@ -18,21 +22,38 @@ async def register_test_solution():
         org_id = new_org.data[0]['id']
         
     # 2. Create Solution Record
-    # We use a real UUID
     solution_id = str(uuid.uuid4())
+    
+    # Absolute path to the test zip
+    zip_path = r"c:\proyectos_dev\discoverIA\datosprueba\build-etl-using-ssis-main.zip"
     
     data = {
         "id": solution_id,
-        "name": "Local Test Run (SSIS)",
+        "name": "SQLGlot Test Run (SSIS)",
         "org_id": org_id,
-        "status": "READY", # Mark as READY since we already ran the analysis manually
-        "storage_path": "manual/local-test.zip"
+        "status": "QUEUED", # Set to QUEUED so the Worker picks it up
+        "storage_path": f"local://{zip_path}"
     }
     
     res = supabase.from_('solutions').insert(data).execute()
     
+    # 3. Create Job Run to trigger worker
+    job_data = {
+        "project_id": solution_id,
+        "status": "queued",
+        "current_stage": "ingest"
+    }
+    job_res = supabase.table("job_run").insert(job_data).execute()
+    new_job_id = job_res.data[0]["job_id"]
+    
+    # 4. Enqueue in SQL Queue
+    from apps.api.app.services.queue import SQLJobQueue
+    queue = SQLJobQueue()
+    queue.enqueue_job(new_job_id)
+    
     print(f"✅ Created Solution: {data['name']}")
     print(f"🆔 ID: {solution_id}")
+    print(f"👷 Job Queued: {new_job_id}")
     print(f"🔗 View Graph at: http://localhost:3000/solutions/{solution_id}")
 
 if __name__ == "__main__":

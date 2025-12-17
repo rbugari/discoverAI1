@@ -29,13 +29,21 @@ OPENAI_API_KEY=your-key
 Open a terminal in `apps/api`:
 ```bash
 cd apps/api
-# Install dependencies (No Redis/Celery required)
+# Install dependencies
 pip install -r requirements.txt
 # Run Server
-uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Frontend (Next.js)
+### 3. Worker (Background Processor)
+**Crucial:** You need a separate terminal for the worker that processes the files.
+Open a new terminal in `apps/api`:
+```bash
+cd apps/api
+python -m app.worker
+```
+
+### 4. Frontend (Next.js)
 Open a new terminal in `apps/web`:
 ```bash
 cd apps/web

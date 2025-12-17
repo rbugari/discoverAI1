@@ -18,6 +18,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  const [stats, setStats] = useState<Record<string, any>>({});
+
   async function fetchSolutions() {
     // Assuming you have an organization, for MVP we fetch all visible
     const { data, error } = await supabase
@@ -29,12 +31,39 @@ export default function DashboardPage() {
       console.error('Error fetching solutions:', error);
     } else {
       setSolutions(data || []);
+      // Fetch stats for each solution (could be optimized with a view or backend aggregation)
+      if (data) {
+        data.forEach(sol => fetchStats(sol.id));
+      }
     }
     setLoading(false);
   }
 
+  async function fetchStats(solutionId: string) {
+      try {
+          const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${solutionId}/stats`);
+          setStats(prev => ({...prev, [solutionId]: res.data}));
+      } catch (e) {
+          console.error(`Failed to fetch stats for ${solutionId}`, e);
+      }
+  }
+
   useEffect(() => {
     fetchSolutions();
+    
+    // Polling for active jobs to update progress
+    const interval = setInterval(() => {
+        setSolutions(prev => {
+            // Only poll if there are processing solutions
+            const hasProcessing = prev.some(s => s.status === 'PROCESSING' || s.status === 'QUEUED');
+            if (hasProcessing) {
+                fetchSolutions();
+            }
+            return prev;
+        });
+    }, 5000); // 5 seconds poll
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -42,12 +71,22 @@ export default function DashboardPage() {
     
     setProcessingId(id);
     try {
-      // Use local Proxy API Route to avoid CORS
-      await axios.delete(`/api/solutions/${id}`);
+      // Direct call to Backend API (bypassing Next.js proxy if it doesn't exist yet, or ensuring it works)
+      // Usually better to use the env var for consistency
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${id}`;
+      await axios.delete(apiUrl);
+      
+      // Update UI immediately
       setSolutions(prev => prev.filter(s => s.id !== id));
+      // Also remove stats to clean up memory
+      setStats(prev => {
+          const newStats = {...prev};
+          delete newStats[id];
+          return newStats;
+      });
     } catch (error) {
       console.error("Delete failed", error);
-      alert("Failed to delete solution");
+      alert("Failed to delete solution. Please try again.");
     } finally {
       setProcessingId(null);
     }
@@ -70,10 +109,10 @@ export default function DashboardPage() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Solutions</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Solutions</h1>
         <Link 
           href="/solutions/new"
-          className="bg-black text-white px-4 py-2 rounded-md flex items-center gap-2 hover:bg-zinc-800 transition-colors"
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary/90 transition-colors shadow-sm"
         >
           <Plus size={16} />
           New Solution
@@ -82,22 +121,22 @@ export default function DashboardPage() {
 
       {loading ? (
         <div className="flex justify-center mt-20">
-          <Loader2 className="animate-spin" size={48} />
+          <Loader2 className="animate-spin text-muted-foreground" size={48} />
         </div>
       ) : solutions.length === 0 ? (
-        <div className="text-center mt-20 text-gray-500">
-          <p className="text-xl mb-4">No solutions found.</p>
+        <div className="text-center mt-20 text-muted-foreground">
+          <p className="text-xl mb-4 font-medium">No solutions found.</p>
           <p>Create your first solution to start discovering your data lineage.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {solutions.map((sol) => (
-            <div key={sol.id} className="border p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-white dark:bg-zinc-900 relative group">
+            <div key={sol.id} className="border border-border p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-card text-card-foreground relative group">
               <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                  <button 
                   onClick={() => handleReanalyze(sol.id)}
                   disabled={!!processingId}
-                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                  className="p-1.5 text-muted-foreground hover:text-primary hover:bg-secondary rounded-md transition-colors"
                   title="Re-analyze"
                 >
                   <RefreshCw size={16} className={processingId === sol.id ? 'animate-spin' : ''} />
@@ -105,29 +144,76 @@ export default function DashboardPage() {
                 <button 
                   onClick={() => handleDelete(sol.id)}
                   disabled={!!processingId}
-                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                   title="Delete"
                 >
                   <Trash2 size={16} />
                 </button>
               </div>
 
-              <h2 className="text-xl font-semibold mb-2">{sol.name}</h2>
+              <h2 className="text-xl font-semibold mb-2 tracking-tight">{sol.name}</h2>
               <div className="flex items-center gap-2 mb-4">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium 
-                  ${sol.status === 'READY' ? 'bg-green-100 text-green-800' : 
-                    sol.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' : 
-                    'bg-gray-100 text-gray-800'}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border
+                  ${sol.status === 'READY' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' : 
+                    sol.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' : 
+                    'bg-secondary text-secondary-foreground border-border'}`}>
                   {sol.status}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted-foreground">
                   {new Date(sol.created_at).toLocaleDateString()}
                 </span>
               </div>
+              
+              {/* Active Job Progress Section */}
+              {(sol.status === 'PROCESSING' || sol.status === 'QUEUED') && stats[sol.id]?.active_job && (
+                  <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-100 dark:border-blue-800">
+                      <div className="flex justify-between text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
+                          <span>{sol.status === 'QUEUED' ? 'Waiting in queue...' : 'Analyzing...'}</span>
+                          <span>{stats[sol.id].active_job.progress_pct}%</span>
+                      </div>
+                      <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5 mb-2 overflow-hidden">
+                          <div 
+                             className="bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out" 
+                             style={{ width: `${stats[sol.id].active_job.progress_pct}%` }}
+                          ></div>
+                      </div>
+                      
+                      {/* Detailed Stats */}
+                      {stats[sol.id].active_job.error_details && stats[sol.id].active_job.error_details.total_files > 0 && (
+                          <div className="text-[10px] text-blue-600/80 dark:text-blue-400/80 truncate font-mono">
+                             {stats[sol.id].active_job.error_details.processed_files}/{stats[sol.id].active_job.error_details.total_files} files
+                             {stats[sol.id].active_job.error_details.current_file && (
+                                 <span className="block truncate mt-0.5 opacity-75">
+                                    → {stats[sol.id].active_job.error_details.current_file}
+                                 </span>
+                             )}
+                          </div>
+                      )}
+                  </div>
+              )}
+
+              {/* Stats Section (Only show if NOT processing to avoid clutter, or show minimal) */}
+              {sol.status === 'READY' && stats[sol.id] && (
+                  <div className="mb-4 grid grid-cols-3 gap-2 text-center text-sm">
+                      <div className="bg-muted/50 p-2 rounded border border-border/50">
+                          <div className="font-bold text-foreground">{stats[sol.id].total_assets}</div>
+                          <div className="text-xs text-muted-foreground">Assets</div>
+                      </div>
+                      <div className="bg-muted/50 p-2 rounded border border-border/50">
+                          <div className="font-bold text-foreground">{stats[sol.id].total_edges}</div>
+                          <div className="text-xs text-muted-foreground">Rels</div>
+                      </div>
+                      <div className="bg-muted/50 p-2 rounded border border-border/50">
+                          <div className="font-bold text-foreground">{stats[sol.id].pipelines || 0}</div>
+                          <div className="text-xs text-muted-foreground">Pipelines</div>
+                      </div>
+                  </div>
+              )}
+
               <Link 
                 href={`/solutions/${sol.id}`}
                 prefetch={false}
-                className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
               >
                 View Graph &rarr;
               </Link>

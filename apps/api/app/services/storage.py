@@ -12,22 +12,31 @@ class StorageService:
     def download_and_extract(self, storage_path: str) -> str:
         """
         Downloads a ZIP from Supabase Storage, extracts it, and returns the extraction directory.
+        Supports local paths for testing if prefixed with 'local://' or absolute paths.
         """
         local_zip_path = os.path.join(settings.UPLOAD_DIR, os.path.basename(storage_path))
         extract_dir = os.path.join(settings.UPLOAD_DIR, os.path.splitext(os.path.basename(storage_path))[0])
         
-        print(f"Downloading {storage_path} to {local_zip_path}...")
-        
-        # Download from Supabase
-        # Bucket is 'source-code' based on frontend logic
-        bucket_name = "source-code"
-        try:
-            with open(local_zip_path, 'wb+') as f:
-                res = self.supabase.storage.from_(bucket_name).download(storage_path)
-                f.write(res)
-        except Exception as e:
-            print(f"Error downloading file: {e}")
-            raise e
+        # Local File Support for Testing
+        if storage_path.startswith("local://") or os.path.isabs(storage_path):
+            source_path = storage_path.replace("local://", "")
+            print(f"Using local file: {source_path}")
+            if not os.path.exists(source_path):
+                 raise Exception(f"Local file not found: {source_path}")
+            shutil.copy(source_path, local_zip_path)
+        else:
+            print(f"Downloading {storage_path} to {local_zip_path}...")
+            
+            # Download from Supabase
+            # Bucket is 'source-code' based on frontend logic
+            bucket_name = "source-code"
+            try:
+                with open(local_zip_path, 'wb+') as f:
+                    res = self.supabase.storage.from_(bucket_name).download(storage_path)
+                    f.write(res)
+            except Exception as e:
+                print(f"Error downloading file: {e}")
+                raise e
             
         print(f"Extracting to {extract_dir}...")
         
@@ -67,6 +76,16 @@ class StorageService:
             git.Repo.clone_from(repo_url, clone_dir)
             print("Clone successful.")
             return clone_dir
+        except git.exc.GitCommandError as ge:
+            # Handle Windows "checkout failed" errors (exit code 128) due to invalid filenames (e.g. colons)
+            # If the .git directory exists, we assume the repo was downloaded but some files failed to extract.
+            # We proceed with the files that ARE valid.
+            if ge.status == 128 and os.path.exists(os.path.join(clone_dir, '.git')):
+                 print(f"[WARNING] Clone finished with checkout errors (likely Windows path compatibility). Continuing with available files. Details: {ge}")
+                 return clone_dir
+            else:
+                 print(f"[ERROR] Git Clone Failed: {ge}")
+                 raise ge
         except Exception as e:
             print(f"Error cloning repository: {e}")
             raise e
