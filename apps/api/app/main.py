@@ -117,14 +117,28 @@ async def delete_solution(solution_id: str):
     try:
         # Delete from Supabase
         print(f"Attempting to delete solution {solution_id} from Supabase...")
+        
+        # 1. Clean Assets (Manual Cascade)
+        # Step 1: Delete Job Runs (they link to project_id)
+        job_del = supabase.table("job_run").delete().eq("project_id", solution_id).execute()
+        print(f"Deleted Job Runs: {len(job_del.data)}")
+        
+        # Step 2: Delete Edges (they link to project_id)
+        # Note: edge_evidence might be orphaned if not cascaded.
+        edge_del = supabase.table("edge_index").delete().eq("project_id", solution_id).execute()
+        print(f"Deleted Edges: {len(edge_del.data)}")
+        
+        # Step 3: Delete Assets (they link to project_id)
+        asset_del = supabase.table("asset").delete().eq("project_id", solution_id).execute()
+        print(f"Deleted Assets: {len(asset_del.data)}")
+        
+        # Step 4: Delete Solution
         res = supabase.from_("solutions").delete().eq("id", solution_id).execute()
-        print(f"Supabase Delete Result: {res}")
+        print(f"Supabase Solution Delete Result: {res}")
         
         # Check if anything was actually deleted
         if not res.data:
             print(f"WARNING: Solution {solution_id} was NOT deleted (RLS or ID not found).")
-            # We assume it might have been deleted but returned no data due to RLS, or it didn't exist.
-            # However, if we want to force cleanup of orphans, we proceed.
         
         # Delete from Neo4j
         try:
@@ -132,17 +146,6 @@ async def delete_solution(solution_id: str):
             graph_service.delete_solution_nodes(solution_id)
         except Exception as graph_e:
             print(f"Failed to delete graph nodes: {graph_e}")
-        
-        # Also clean up related job_runs and assets from Supabase manually if cascade delete is not set up in DB
-        # Ideally, DB Foreign Keys with ON DELETE CASCADE should handle this.
-        # But let's be safe.
-        
-        # Clean Assets
-        supabase.table("asset").delete().eq("project_id", solution_id).execute()
-        # Clean Jobs
-        supabase.table("job_run").delete().eq("project_id", solution_id).execute()
-        # Clean Edge Index
-        supabase.table("edge_index").delete().eq("project_id", solution_id).execute()
 
         return {"status": "deleted", "id": solution_id}
     except Exception as e:
