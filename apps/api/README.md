@@ -1,4 +1,4 @@
-# Nexus Discovery API & Worker
+# Nexus Discovery API & Worker (v2.0)
 
 This directory contains the FastAPI backend and the Asynchronous Worker for the Nexus Discovery Platform.
 
@@ -9,12 +9,12 @@ This directory contains the FastAPI backend and the Asynchronous Worker for the 
 - **Entry Point**: `app/main.py`
 - **Port**: 8000
 
-### 2. Worker (Pipeline V2)
+### 2. Worker (Pipeline Orchestrator)
 - Polling-based worker that processes jobs from the `jobs` table in Supabase.
 - **Entry Point**: `app/worker.py`
-- **Logic**: `app/services/pipeline_v2.py`
+- **Orchestrator**: `app/pipeline/orchestrator.py`
 - **Features**:
-    - **Stage-based Processing**: Ingest, EnumerateFiles, ExtractLineage, PersistResults, UpdateGraph.
+    - **Stage-based Processing**: Ingest (Zip/Git) -> EnumerateFiles -> ExtractLineage -> PersistResults -> UpdateGraph.
     - **ActionRunner**: Wrapper for LLM calls with Fallback logic (70B -> 8B) and Error Handling.
     - **LLM Adapter**: Unified interface for Groq, OpenAI, Azure.
 
@@ -62,7 +62,7 @@ python scripts/test_integration_v3.py
 
 ### "Please reduce the length of the messages" (Groq 400)
 - This means the input file is too large for the model's context or Groq's API limit.
-- **Solution**: The `ActionRunner` automatically truncates inputs to ~400k characters for paid keys (or lower for free tier).
+- **Solution**: The `ActionRunner` automatically truncates inputs to ~100k characters for paid keys (or lower for free tier).
 - If persistent, check `app/actions/__init__.py` truncation logic.
 
 ### 0 Assets Found

@@ -7,6 +7,7 @@ import time
 import hashlib
 import json
 import traceback
+import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 from pathlib import Path
@@ -597,6 +598,10 @@ class PipelineOrchestrator:
                 # Edges
                 edges = []
                 for e in raw_data.get("edges", []):
+                    # Generar edge_id si no existe
+                    if not e.get("edge_id"):
+                        e["edge_id"] = f"edge_{uuid.uuid4().hex[:8]}"
+                    
                     edges.append(ExtractedEdge(
                         edge_id=e.get("edge_id"),
                         edge_type=e.get("edge_type"),

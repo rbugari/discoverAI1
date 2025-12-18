@@ -1,7 +1,14 @@
-# Nexus Discovery Platform (Direct Run / No Docker)
+# Nexus Discovery Platform (v2.0)
 
 ## Overview
 Nexus Discovery is a SaaS platform for automated reverse engineering of data code (SSIS, SQL, Python) using Generative AI. It extracts data lineage, creates documentation, and visualizes relationships in a Knowledge Graph.
+
+## 🚀 What's New in v2.0
+- **Advanced Pipeline Orchestrator**: A robust, stage-based engine (Ingest -> Enumerate -> Extract -> Persist) that handles failures gracefully.
+- **Deep Lineage Extraction**: "Senior Data Engineer" prompts that extract granular details like SQL Queries, Column Transformations, and Complex Data Flows.
+- **Resilient AI Execution**: The new `ActionRunner` handles Rate Limits, Context Windows, and JSON Validation errors automatically, with smart fallbacks (e.g., Llama 3 70B -> 8B).
+- **Universal Ingestion**: Support for both **ZIP File Uploads** and **Git Repository Cloning**.
+- **Self-Healing Jobs**: Automatic re-queuing of failed jobs and partial result persistence.
 
 ## Documentation
 - [Functional Specification](docs/FUNCTIONAL_SPEC.md)

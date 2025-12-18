@@ -130,12 +130,17 @@ class ActionRunner:
             prompt_content = self._load_prompt(model_config.prompt_file, input_data, context)
             
             # Preparar mensajes para LLM
-            # Truncar input_data. Groq parece rechazar inputs > 100k tokens incluso en paid.
-            # Bajamos a 30k chars (~7.5k tokens) para máxima seguridad.
-            input_json = json.dumps(input_data)
-            if len(input_json) > 30000: 
-                print(f"[ACTION_RUNNER] Truncating input from {len(input_json)} chars to 30000")
-                input_json = input_json[:30000] + "... (truncated)"
+            # Truncar input_data de forma segura (sin romper el JSON)
+            # Copiar input_data para no modificar el original
+            safe_input = input_data.copy()
+            
+            # Si hay contenido grande, truncarlo ANTES de dumps
+            if "content" in safe_input and isinstance(safe_input["content"], str):
+                if len(safe_input["content"]) > 100000: # Subir a 100k ya que el JSON será válido
+                    print(f"[ACTION_RUNNER] Truncating content from {len(safe_input['content'])} to 100000 chars")
+                    safe_input["content"] = safe_input["content"][:100000] + "... (truncated)"
+            
+            input_json = json.dumps(safe_input)
             
             messages = [
                 {"role": "system", "content": prompt_content},
@@ -154,9 +159,11 @@ class ActionRunner:
             latency_ms = int((time.time() - start_time) * 1000)
             
             if not llm_result.get("success"):
+                error_detail = llm_result.get("error", "Unknown LLM error")
+                print(f"[ACTION_RUNNER] Model {model_config.model} failed: {error_detail}")
                 return ActionResult(
                     success=False,
-                    error_message=llm_result.get("error", "Unknown LLM error"),
+                    error_message=error_detail,
                     error_type="llm_error",
                     model_used=model_config.model,
                     latency_ms=latency_ms
@@ -179,6 +186,8 @@ class ActionRunner:
                     )
                     
                     if validation_error:
+                        print(f"[ACTION_RUNNER] JSON Validation Failed for {model_config.model}: {validation_error}")
+                        print(f"[ACTION_RUNNER] Raw Content Preview: {cleaned_content[:200]}...")
                         return ActionResult(
                             success=False,
                             error_message=f"JSON validation failed: {validation_error}",
@@ -190,6 +199,8 @@ class ActionRunner:
                     response_data = parsed_data
                     
                 except json.JSONDecodeError as e:
+                    print(f"[ACTION_RUNNER] JSON Decode Error for {model_config.model}: {e}")
+                    print(f"[ACTION_RUNNER] Raw Content Preview: {cleaned_content[:200]}...")
                     return ActionResult(
                         success=False,
                         error_message=f"Invalid JSON response: {str(e)}",
@@ -426,14 +437,19 @@ Respond with JSON containing your analysis.
                     if "node_type" not in node:
                         return f"Node {i} missing 'node_type'"
                 
-                # Validar campos requeridos en edges
+                # Validar campos requeridos en edges (y filtrar los malos)
+                valid_edges = []
+                invalid_edges_count = 0
                 for i, edge in enumerate(data["edges"]):
-                    if not isinstance(edge, dict):
-                        return f"Edge {i} must be an object"
-                    if "from_node_id" not in edge:
-                        return f"Edge {i} missing 'from_node_id'"
-                    if "to_node_id" not in edge:
-                        return f"Edge {i} missing 'to_node_id'"
+                    if isinstance(edge, dict) and "from_node_id" in edge and "to_node_id" in edge:
+                         valid_edges.append(edge)
+                    else:
+                         invalid_edges_count += 1
+                
+                if invalid_edges_count > 0:
+                     print(f"[ACTION_RUNNER] Warning: Ignored {invalid_edges_count} invalid edges in {prompt_file}")
+                
+                data["edges"] = valid_edges # Actualizar lista con solo los válidos
             
             return None  # Validación exitosa
             
