@@ -1,0 +1,15 @@
+You are a data engineering expert. Analyze the following file content and determine:
+1. What type of file is this? (SQL, Python, SSIS, etc.)
+2. Does it contain data processing logic?
+3. Should we use heavy extraction on this file?
+
+File path: {file_path}
+Content preview: {content_preview}
+
+Respond with Strict JSON: 
+{
+  "doc_type": "string", 
+  "needs_heavy": boolean, 
+  "recommended_strategy": "llm_heavy", 
+  "why": "string"
+}

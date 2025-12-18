@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from ..config import settings
 import json
+import time
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 class GraphService(ABC):
     @abstractmethod
@@ -53,9 +55,6 @@ class MockGraphService(GraphService):
         
     def find_paths(self, from_id: str, to_id: str, max_hops: int):
         return [] # Mock returns empty
-
-import time
-from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 class Neo4jGraphService(GraphService):
     def __init__(self):
@@ -208,6 +207,107 @@ class Neo4jGraphService(GraphService):
         """
         return self._process_graph_query(query, params={"from_id": from_id, "to_id": to_id})
 
+class SupabaseGraphService(GraphService):
+    def __init__(self):
+        from supabase import create_client
+        key = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY
+        self.client = create_client(settings.SUPABASE_URL, key)
+        print("[SUPABASE GRAPH] Initialized")
+
+    def upsert_node(self, label: str, properties: dict):
+        # No-op for now, managed by CatalogService
+        pass
+
+    def upsert_relationship(self, source_props: dict, target_props: dict, rel_type: str):
+        # No-op for now, managed by CatalogService
+        pass
+
+    def delete_solution_nodes(self, solution_id: str):
+        # Managed by Cascade in DB or manual clean endpoint
+        pass
+
+    def get_graph_data(self, solution_id: str):
+        print(f"[SUPABASE GRAPH] Fetching graph for {solution_id}")
+        print(f"[SUPABASE GRAPH] Client URL: {settings.SUPABASE_URL}")
+        # print(f"[SUPABASE GRAPH] Key Used: {settings.SUPABASE_SERVICE_ROLE_KEY[:5]}...") 
+        
+        # 1. Fetch Assets (Nodes)
+        assets_res = self.client.table("asset").select("*").eq("project_id", solution_id).execute()
+        assets = assets_res.data if assets_res.data else []
+        print(f"[SUPABASE GRAPH] Raw Assets Count: {len(assets)}")
+        
+        # 2. Fetch Edges
+        edges_res = self.client.table("edge_index").select("*").eq("project_id", solution_id).execute()
+        edges = edges_res.data if edges_res.data else []
+        print(f"[SUPABASE GRAPH] Raw Edges Count: {len(edges)}")
+        
+        print(f"[SUPABASE GRAPH] Found {len(assets)} assets and {len(edges)} edges")
+        
+        # 3. Transform to Frontend Format
+        # Format: { nodes: [{id, data: {label, type...}}], edges: [{id, source, target, label}] }
+        
+        nodes_list = []
+        for a in assets:
+            # Los atributos extraídos (schema, columns, etc) están en 'tags'
+            tags = a.get("tags", {}) or {}
+            
+            nodes_list.append({
+                "id": a["asset_id"],
+                "data": {
+                    "label": a["name_display"],
+                    "type": a["asset_type"],
+                    "system": a.get("system", "unknown"),
+                    "tags": tags,
+                    # Mapear explícitamente propiedades clave para el frontend
+                    "schema": tags.get("schema", ""),
+                    "columns": tags.get("columns", []),
+                    "summary": tags.get("description", "") or tags.get("summary", "")
+                }
+            })
+            
+        edges_list = []
+        for e in edges:
+            edges_list.append({
+                "id": e["edge_id"],
+                "source": e["from_asset_id"],
+                "target": e["to_asset_id"],
+                "label": e["edge_type"]
+            })
+            
+        return {"nodes": nodes_list, "edges": edges_list}
+
+    def get_subgraph(self, center_id: str, depth: int, limit: int):
+        # Basic implementation for depth=1 (common case)
+        # For deeper graphs, recursive CTEs or multiple queries needed.
+        # MVP: Return neighbors
+        
+        # Outgoing
+        out_edges = self.client.table("edge_index").select("*").eq("from_asset_id", center_id).execute().data
+        
+        # Incoming
+        in_edges = self.client.table("edge_index").select("*").eq("to_asset_id", center_id).execute().data
+        
+        all_edges = out_edges + in_edges
+        
+        # Collect Node IDs
+        node_ids = set([center_id])
+        for e in all_edges:
+            node_ids.add(e["from_asset_id"])
+            node_ids.add(e["to_asset_id"])
+            
+        # Fetch Nodes
+        assets = self.client.table("asset").select("*").in_("asset_id", list(node_ids)).execute().data
+        
+        # Transform
+        nodes_list = [{"id": a["asset_id"], "data": {"label": a["name_display"], "type": a["asset_type"]}} for a in assets]
+        edges_list = [{"id": e["edge_id"], "source": e["from_asset_id"], "target": e["to_asset_id"], "label": e["edge_type"]} for e in all_edges]
+        
+        return {"nodes": nodes_list, "edges": edges_list}
+
+    def find_paths(self, from_id: str, to_id: str, max_hops: int):
+        # Not implemented for SQL yet (requires recursive query)
+        return {"nodes": [], "edges": []}
+
 def get_graph_service() -> GraphService:
     print(f"[GRAPH SERVICE] Mode: {settings.GRAPH_MODE}")
     print(f"[GRAPH SERVICE] URI: {settings.NEO4J_URI}")
@@ -216,7 +316,15 @@ def get_graph_service() -> GraphService:
         try:
             return Neo4jGraphService()
         except Exception as e:
-            print(f"Failed to connect to Neo4j: {e}. Falling back to MOCK.")
-            return MockGraphService()
+            print(f"Failed to connect to Neo4j: {e}. Falling back to SUPABASE.")
+            return SupabaseGraphService()
+    elif settings.GRAPH_MODE == "SUPABASE":
+        return SupabaseGraphService()
     else:
-        return MockGraphService()
+        # Default to Supabase instead of Mock if not specified, assuming we want persistence
+        # Or keep Mock if explicitly MOCK
+        if settings.GRAPH_MODE == "MOCK":
+            return MockGraphService()
+        else:
+            print(f"Unknown GRAPH_MODE '{settings.GRAPH_MODE}'. Defaulting to SUPABASE.")
+            return SupabaseGraphService()

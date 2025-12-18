@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENROUTER_MODEL: str = "deepseek/deepseek-v3.2"
     
+    # Groq
+    GROQ_API_KEY: str = ""
+    LLM_PROVIDER: str = "openrouter" # "openrouter" or "groq"
+    
     # Storage
     UPLOAD_DIR: str = os.path.join(os.getcwd(), "temp_uploads")
 

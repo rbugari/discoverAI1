@@ -1,0 +1,90 @@
+# Configuración de Modelos y Acciones para DiscoverAI (GROQ MODE)
+# Version: 2.0 (Llama 3 Strategy)
+# Fecha: 2025-12-18
+
+version: 2
+
+# Configuración por defecto para todas las acciones
+defaults:
+  temperature: 0.1
+  max_tokens: 8000
+  timeout_ms: 60000
+  provider: "groq"
+
+# Definición de acciones y sus modelos primarios
+actions:
+  # Triage rápido: Escáner Rápido (Velocidad)
+  triage_fast:
+    model: "llama-3.1-8b-instant"
+    prompt_file: "prompts/triage_fast.txt"
+    temperature: 0.1
+    max_tokens: 1000
+    timeout_ms: 10000
+    description: "Escáner rápido para decidir estrategia de análisis"
+
+  # Extracción estricta: Analizador Principal (Inteligencia)
+  extract_strict:
+    model: "llama-3.3-70b-versatile"
+    prompt_file: "prompts/extract_strict.txt"
+    temperature: 0.0
+    max_tokens: 4096
+    timeout_ms: 60000
+    description: "Análisis profundo de ETL complejo"
+
+  # Resumen
+  summarize:
+    model: "llama-3.3-70b-versatile"
+    prompt_file: "prompts/summarize.md" 
+    temperature: 0.2
+    max_tokens: 2000
+    timeout_ms: 30000
+    description: "Generación de resúmenes detallados"
+
+  # Extracción SQL
+  extract_sql:
+    model: "llama-3.3-70b-versatile"
+    prompt_file: "prompts/extract_sql.txt"
+    temperature: 0.0
+    max_tokens: 4096
+    timeout_ms: 60000
+    description: "Análisis SQL profundo"
+
+  # Extracción Python
+  extract_python:
+    model: "llama-3.3-70b-versatile"
+    prompt_file: "prompts/extract_python.md"
+    temperature: 0.0
+    max_tokens: 4096
+    timeout_ms: 60000
+    description: "Análisis Python profundo"
+
+# Cadenas de fallback (usando modelos más pequeños de Groq si el grande falla o timeout)
+fallbacks:
+  extract_strict:
+    - model: "llama-3.1-8b-instant"
+      prompt_file: "prompts/extract_strict.txt"
+      temperature: 0.0
+      max_tokens: 4096
+      timeout_ms: 30000
+      description: "Fallback: Llama 8B Instant"
+
+  extract_sql:
+    - model: "llama-3.1-8b-instant"
+      prompt_file: "prompts/extract_sql.txt"
+      temperature: 0.0
+      max_tokens: 4096
+      timeout_ms: 30000
+      description: "Fallback: Llama 8B Instant"
+
+# Configuración de costos aproximados (USD por 1K tokens)
+cost_estimates:
+  "llama-3.3-70b-versatile": 0.00059
+  "llama-3.1-8b-instant": 0.00005
+  "mistralai/devstral-2512:free": 0.0
+  "google/gemini-2.0-flash-exp": 0.0
+
+# Límites y validaciones
+limits:
+  max_fallback_chain_length: 3
+  max_total_tokens_per_file: 30000 # Groq soporta contexto grande
+  max_processing_time_per_file_ms: 120000

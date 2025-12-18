@@ -1,7 +1,7 @@
 # Nexus Discovery Platform (Direct Run / No Docker)
 
 ## Overview
-Nexus Discovery is a SaaS platform for automated reverse engineering of data code using AI.
+Nexus Discovery is a SaaS platform for automated reverse engineering of data code (SSIS, SQL, Python) using Generative AI. It extracts data lineage, creates documentation, and visualizes relationships in a Knowledge Graph.
 
 ## Documentation
 - [Functional Specification](docs/FUNCTIONAL_SPEC.md)
@@ -13,47 +13,71 @@ Nexus Discovery is a SaaS platform for automated reverse engineering of data cod
 1.  **Python 3.11+**
 2.  **Node.js 18+**
 3.  **Supabase Project** (Free Tier): [Create one here](https://supabase.com/)
-    *   You need the `URL` and `ANON_KEY`.
-    *   Run the `db.sql` script in the Supabase SQL Editor.
+    *   Required: `URL` and `ANON_KEY`.
+    *   Setup: Run `db.sql` in Supabase SQL Editor.
 4.  **Neo4j AuraDB** (Free Tier): [Create one here](https://neo4j.com/cloud/aura/)
-    *   You need the `URI`, `Username`, and `Password`.
+    *   Required: `URI`, `Username`, and `Password`.
+5.  **LLM Provider**:
+    *   **Groq** (Recommended for speed/cost): Get API Key at [console.groq.com](https://console.groq.com).
+    *   **OpenAI/Azure**: Supported but requires configuration adjustment.
 
 ## Setup & Run
 
 ### 1. Configuration
-Create a `.env` file in the root `discoverIA` folder (copy from `.env.example`) and fill in your cloud credentials:
+Create a `.env` file in the root `discoverIA` folder (copy from `.env.example`) and fill in your credentials:
+
 ```ini
-NEO4J_URI=neo4j+s://your-aura-instance.databases.neo4j.io
+# Database & Graph
+NEO4J_URI=neo4j+s://your-instance.databases.neo4j.io
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=your-password
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-anon-key
-OPENAI_API_KEY=your-key
+
+# AI Provider (Groq Recommended)
+LLM_PROVIDER=groq
+GROQ_API_KEY=gsk_...
+# OPENAI_API_KEY=... (If using OpenAI)
 ```
 
 ### 2. Backend (FastAPI)
 Open a terminal in `apps/api`:
 ```bash
 cd apps/api
+# Create venv (optional but recommended)
+python -m venv .venv
+.\.venv\Scripts\activate  # Windows
+# source .venv/bin/activate # Linux/Mac
+
 # Install dependencies
 pip install -r requirements.txt
-# Run Server
+
+# Run API Server
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Worker (Background Processor)
-**Crucial:** You need a separate terminal for the worker that processes the files.
-Open a new terminal in `apps/api`:
+### 3. Worker (Pipeline Engine)
+**Crucial:** The worker processes file uploads asynchronously.
+Open a NEW terminal in `apps/api`:
 ```bash
 cd apps/api
+# Activate venv if used
+.\.venv\Scripts\activate
+
+# Run Worker
 python -m app.worker
 ```
 
 ### 4. Frontend (Next.js)
-Open a new terminal in `apps/web`:
+Open a NEW terminal in `apps/web`:
 ```bash
 cd apps/web
 npm install
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Architecture Highlights
+- **Pipeline V2**: Robust, stage-based processing engine (Ingest -> Enumerate -> Extract -> Persist -> Graph).
+- **ActionRunner**: Modular AI execution handling fallbacks (e.g., Llama 3 70B -> 8B) and rate limits.
+- **Strict JSON Extraction**: Specialized prompts ensure clean data extraction for SSIS and SQL.
