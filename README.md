@@ -30,24 +30,27 @@ Nexus Discovery is a SaaS platform for automated reverse engineering of data cod
 
 ## Setup & Run
 
-### 1. Configuration
-Create a `.env` file in the root `discoverIA` folder (copy from `.env.example`) and fill in your credentials:
+### ⚡ Quick Start (Recommended)
+We provide a unified launcher script to start all services (API, Worker, Web) simultaneously in separate windows.
 
-```ini
-# Database & Graph
-NEO4J_URI=neo4j+s://your-instance.databases.neo4j.io
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your-password
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
+1.  **Configure Environment**:
+    Create `.env` in the root folder (see `.env.example`).
+2.  **Run Launcher**:
+    ```bash
+    # From project root
+    python start_dev.py
+    ```
+    This will launch:
+    *   **API** on http://localhost:8000
+    *   **Web** on http://localhost:3000
+    *   **Celery Worker** (Background processing)
 
-# AI Provider (Groq Recommended)
-LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_...
-# OPENAI_API_KEY=... (If using OpenAI)
-```
+---
 
-### 2. Backend (FastAPI)
+### 🔧 Manual Setup
+If you prefer running services individually:
+
+#### 1. Backend (FastAPI)
 Open a terminal in `apps/api`:
 ```bash
 cd apps/api
@@ -63,7 +66,7 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Worker (Pipeline Engine)
+#### 2. Worker (Pipeline Engine)
 **Crucial:** The worker processes file uploads asynchronously.
 Open a NEW terminal in `apps/api`:
 ```bash
@@ -75,7 +78,7 @@ cd apps/api
 python -m app.worker
 ```
 
-### 4. Frontend (Next.js)
+#### 3. Frontend (Next.js)
 Open a NEW terminal in `apps/web`:
 ```bash
 cd apps/web
@@ -83,6 +86,12 @@ npm install
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🛠️ Utility Scripts
+Useful scripts for debugging and maintenance are located in `apps/api/scripts/`:
+*   `system_reset.py`: **Hard Reset**. Wipes Neo4j and Supabase data for a fresh start.
+*   `check_db_ready.py`: Verifies Supabase tables exist.
+*   `check_neo4j.py`: Tests Neo4j connectivity.
 
 ## Architecture Highlights
 - **Pipeline V2**: Robust, stage-based processing engine (Ingest -> Enumerate -> Extract -> Persist -> Graph).
