@@ -17,6 +17,11 @@ erDiagram
     %% Execution
     job_run ||--o{ job_stage_run : "has steps"
     job_run ||--|| job_queue : "queued in"
+    job_run ||--o{ job_plan : "has"
+
+    %% Planning (v3.1)
+    job_plan ||--o{ job_plan_area : "has areas"
+    job_plan_area ||--o{ job_plan_item : "has items"
 
     %% Catalog / Graph
     asset ||--o{ asset_version : "history"
@@ -55,7 +60,8 @@ erDiagram
 
     job_run {
         uuid job_id PK
-        uuid project_id FK "Ref: solutions.id"
+        uuid project_id FK
+        uuid plan_id FK
         text status
         int progress_pct
         text current_stage
@@ -64,6 +70,36 @@ erDiagram
         timestamp started_at
         timestamp finished_at
         jsonb error_details
+    }
+
+    job_plan {
+        uuid plan_id PK
+        uuid job_id FK
+        text status
+        jsonb summary
+        timestamp created_at
+    }
+
+    job_plan_area {
+        uuid area_id PK
+        uuid plan_id FK
+        text area_key
+        text title
+        int order_index
+    }
+
+    job_plan_item {
+        uuid item_id PK
+        uuid plan_id FK
+        uuid area_id FK
+        text path
+        text file_type
+        bigint size_bytes
+        text strategy
+        text recommended_action
+        boolean enabled
+        text file_hash
+        jsonb estimate
     }
 
     job_stage_run {
@@ -156,15 +192,35 @@ Almacén seguro para claves de API de terceros.
 
 ---
 
-### 2. Motor de Ejecución (Execution Engine)
+### 2. Motor de Ejecución & Planeación (Execution & Planning)
 
 #### `job_run`
 Registro de una ejecución de análisis para una solución.
 - **job_id**: UUID (PK)
 - **project_id**: FK a `solutions(id)`.
+- **plan_id**: FK al `job_plan` aprobado para esta ejecución.
 - **status**: Estado de la ejecución ('queued', 'running', 'completed', 'failed').
 - **progress_pct**: Porcentaje de progreso (0-100).
 - **error_details**: JSON con detalles de errores si falla.
+
+#### `job_plan`
+Contenedor del plan de ejecución generado antes del análisis profundo. Permite el flujo "Human-in-the-loop".
+- **plan_id**: UUID (PK).
+- **job_id**: FK a `job_run`.
+- **status**: Estado del plan ('draft', 'approved').
+
+#### `job_plan_area`
+Agrupaciones lógicas dentro del plan (ej. "ETL Files", "SQL Scripts").
+- **area_id**: UUID (PK).
+- **title**: Título legible del área.
+
+#### `job_plan_item`
+Cada archivo individual identificado para ser procesado.
+- **item_id**: UUID (PK).
+- **path**: Ruta relativa del archivo.
+- **strategy**: Estrategia de análisis ('LLM_ONLY', 'PARSER_ONLY', 'SKIP').
+- **file_hash**: Hash SHA256 para habilitar el modo **Truly Incremental**.
+- **enabled**: Flag que indica si el usuario aprobó el procesamiento de este archivo.
 
 #### `job_stage_run`
 Desglose de la ejecución en etapas (ej. "ingest", "extract", "graph").
