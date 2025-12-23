@@ -38,15 +38,26 @@ class ModelRouter:
         
         # Intentar cargar config activa
         try:
-            active = self.config_manager.get_active_config()
-            if active and active.get("routing"):
-                routing_path = active.get("routing")
+            # Check for Economy Mode override via ENV
+            economy_mode = os.getenv("LLM_ECONOMY_MODE", "false").lower() == "true"
+            
+            if economy_mode:
+                routing_path = "routings/routing-economy-groq.yml"
                 self.config = self.config_manager.get_routing(routing_path)
-                self.provider_name = self._extract_provider_name(active.get("provider"))
-                print(f"[ROUTER] Loaded v3 routing: {routing_path} (Provider: {self.provider_name})")
-                print(f"[ROUTER] Actions in YAML: {list(self.config.get('actions', {}).keys())}")
+                # Ensure we use groq provider for economy mode
+                self.provider_name = "groq"
+                print(f"[ROUTER] ⚡ ECONOMY MODE ACTIVE: Overriding to {routing_path} (Provider: {self.provider_name})")
             else:
-                raise Exception("No active v3 config")
+                active = self.config_manager.get_active_config()
+                if active and active.get("routing"):
+                    routing_path = active.get("routing")
+                    self.config = self.config_manager.get_routing(routing_path)
+                    self.provider_name = self._extract_provider_name(active.get("provider"))
+                    print(f"[ROUTER] Loaded v3 routing: {routing_path} (Provider: {self.provider_name})")
+                else:
+                    raise Exception("No active v3 config")
+                    
+            print(f"[ROUTER] Actions in YAML: {list(self.config.get('actions', {}).keys())}")
         except Exception as e:
             print(f"[ROUTER] Fallback to legacy models.yml: {e}")
             self.provider_name = "openrouter" # Legacy default
