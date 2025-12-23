@@ -92,6 +92,7 @@ class FileProcessingLogger:
         # Insertar en DB
         try:
             log_data = asdict(log_entry)
+            log_data['id'] = log_id # Fix: Assign the generated ID to the 'id' column
             # Convertir datetime a string ISO
             if log_data['created_at']:
                 log_data['created_at'] = log_data['created_at'].isoformat()

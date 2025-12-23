@@ -1,9 +1,11 @@
+import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from .tasks import analyze_solution_task
 from pydantic import BaseModel
 from .routers import planning
+from .services.config_manager import ConfigManager
 
 load_dotenv()
 
@@ -177,13 +179,46 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
     if request.mode == "full":
         try:
             print(f"Cleaning previous data for solution {solution_id} (Full Reprocess)...")
-            # Reuse logic from delete_solution but keep solution record
-            supabase.table("job_run").delete().eq("project_id", solution_id).execute()
+            
+            # 1. Fetch all job_ids for this project to clean logs and plans
+            jobs_res = supabase.table("job_run").select("job_id").eq("project_id", solution_id).execute()
+            job_ids = [j["job_id"] for j in jobs_res.data]
+            
+            if job_ids:
+                # Cleanup logs and plans
+                supabase.table("file_processing_log").delete().in_("job_id", job_ids).execute()
+                
+                # Fetch plan_ids
+                plans_res = supabase.table("job_plan").select("plan_id").in_("job_id", job_ids).execute()
+                plan_ids = [p["plan_id"] for p in plans_res.data]
+                
+                if plan_ids:
+                    # Cleanup Items -> Areas -> Plans
+                    supabase.table("job_plan_item").delete().in_("plan_id", plan_ids).execute()
+                    supabase.table("job_plan_area").delete().in_("plan_id", plan_ids).execute()
+                    supabase.table("job_plan").delete().in_("plan_id", plan_ids).execute()
+
+            # 2. Cleanup Catalog Data
+            # Note: edge_evidence usually cleared via FK cascade or manual if needed. 
+            # If chk fails, we might need a more selective delete.
             supabase.table("edge_index").delete().eq("project_id", solution_id).execute()
             supabase.table("asset").delete().eq("project_id", solution_id).execute()
             supabase.table("evidence").delete().eq("project_id", solution_id).execute()
+            
+            # 3. Cleanup Job Runs
+            supabase.table("job_run").delete().eq("project_id", solution_id).execute()
+            
+            # 4. Cleanup Neo4j
+            try:
+                from .services.graph import get_graph_service
+                graph_svc = get_graph_service()
+                graph_svc.delete_solution_nodes(solution_id)
+            except Exception as graph_e:
+                print(f"Neo4j Cleanup Warning: {graph_e}")
+
         except Exception as e:
             print(f"Warning during cleanup: {e}")
+            traceback.print_exc()
 
     # Fetch solution to get file_path
     try:
@@ -313,6 +348,28 @@ async def admin_cleanup_database():
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/model-config")
+async def get_model_config():
+    """Returns available and active model configurations."""
+    config_dir = os.path.join(os.path.dirname(__file__), "..", "config")
+    manager = ConfigManager(config_dir)
+    return manager.list_available_configs()
+
+class ActivateConfigRequest(BaseModel):
+    provider_path: str
+    routing_path: str
+
+@app.post("/admin/model-config/activate")
+async def activate_model_config(req: ActivateConfigRequest):
+    """Activates a specific model configuration."""
+    config_dir = os.path.join(os.path.dirname(__file__), "..", "config")
+    manager = ConfigManager(config_dir)
+    try:
+        manager.activate_config(req.provider_path, req.routing_path)
+        return {"status": "success", "message": f"Activated {req.routing_path}"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/solutions/{solution_id}/stats")
 async def get_solution_stats(solution_id: str):

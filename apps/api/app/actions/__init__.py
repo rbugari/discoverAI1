@@ -128,6 +128,7 @@ class ActionRunner:
         try:
             # Cargar prompt
             prompt_content = self._load_prompt(model_config.prompt_file, input_data, context)
+            print(f"!!! MEGA TRACE: _execute_single_model using {model_config.model} (Provider: {model_config.provider})")
             
             # Preparar mensajes para LLM
             # Truncar input_data de forma segura (sin romper el JSON)
@@ -153,7 +154,7 @@ class ActionRunner:
                 messages=messages,
                 temperature=model_config.temperature,
                 max_tokens=model_config.max_tokens,
-                provider=settings.LLM_PROVIDER # Usar provider configurado (groq/openrouter)
+                provider=model_config.provider  # Fixed: Use provider from config
             )
             
             latency_ms = int((time.time() - start_time) * 1000)
@@ -215,17 +216,14 @@ class ActionRunner:
             tokens_in = llm_result.get("tokens_in", 0)
             tokens_out = llm_result.get("tokens_out", 0)
             total_tokens = tokens_in + tokens_out
-            
-            cost_estimate = self._estimate_cost(
-                model_config.model, 
-                total_tokens
-            )
+            cost_estimate_usd = self._estimate_cost(model_config.model, total_tokens)
             
             # Actualizar log de auditoría si existe
             if log_id:
-                self.logger.update_model_usage(log_id, "openrouter", model_config.model)
+                # Fixed: Use actual provider from config
+                self.logger.update_model_usage(log_id, model_config.provider, model_config.model)
                 self.logger.update_tokens_and_cost(
-                    log_id, tokens_in, tokens_out, cost_estimate, latency_ms
+                    log_id, tokens_in, tokens_out, cost_estimate_usd, latency_ms
                 )
             
             return ActionResult(
@@ -236,7 +234,7 @@ class ActionRunner:
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 total_tokens=total_tokens,
-                cost_estimate_usd=cost_estimate
+                cost_estimate_usd=cost_estimate_usd
             )
             
         except Exception as e:
@@ -286,7 +284,7 @@ class ActionRunner:
                 if log_id:
                     self.logger.update_model_usage(
                         log_id, 
-                        "openrouter", 
+                        fallback_config.provider, 
                         result.model_used,
                         fallback_used=True,
                         fallback_chain=models_attempted

@@ -12,6 +12,7 @@ class ModelConfig:
     """Configuración de modelo para una acción"""
     model: str
     prompt_file: str
+    provider: str = "openrouter" # Added to support multiple providers
     temperature: float = 0.1
     max_tokens: int = 1800
     timeout_ms: int = 60000
@@ -25,150 +26,104 @@ class ActionConfig:
     
 class ModelRouter:
     """
-    Router de modelos que lee configuración de config/models.yml
-    y proporciona modelos según la acción solicitada
+    Router de modelos dinámico (v3.0).
+    Lee la configuración activa vía ConfigManager o cae a models.yml
     """
     
     def __init__(self, config_path: str = None):
-        if config_path is None:
-            config_path = os.path.join(Path(__file__).parent.parent.parent, "config", "models.yml")
+        from ..services.config_manager import ConfigManager
         
-        self.config_path = config_path
-        self.config = self._load_config()
+        self.config_root = os.path.join(Path(__file__).parent.parent.parent, "config")
+        self.config_manager = ConfigManager(self.config_root)
+        
+        # Intentar cargar config activa
+        try:
+            active = self.config_manager.get_active_config()
+            if active and active.get("routing"):
+                routing_path = active.get("routing")
+                self.config = self.config_manager.get_routing(routing_path)
+                self.provider_name = self._extract_provider_name(active.get("provider"))
+                print(f"[ROUTER] Loaded v3 routing: {routing_path} (Provider: {self.provider_name})")
+                print(f"[ROUTER] Actions in YAML: {list(self.config.get('actions', {}).keys())}")
+            else:
+                raise Exception("No active v3 config")
+        except Exception as e:
+            print(f"[ROUTER] Fallback to legacy models.yml: {e}")
+            self.provider_name = "openrouter" # Legacy default
+            if config_path is None:
+                config_path = os.path.join(self.config_root, "models.yml")
+            self.config_path = config_path
+            self.config = self._load_config()
+            
         self._validate_config()
-        
+
+    def _extract_provider_name(self, provider_path: str) -> str:
+        if not provider_path: return "openrouter"
+        if "groq" in provider_path.lower(): return "groq"
+        if "openai" in provider_path.lower(): return "openai"
+        return "openrouter"
+    
     def _load_config(self) -> Dict[str, Any]:
-        """Carga configuración desde YAML"""
+        """Carga configuración desde YAML (Legacy)"""
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
         except FileNotFoundError:
-            # Configuración por defecto si no existe el archivo
             return self._get_default_config()
-        except yaml.YAMLError as e:
-            raise ValueError(f"Error parsing models.yml: {e}")
-    
+        except Exception:
+            return self._get_default_config()
+
     def _get_default_config(self) -> Dict[str, Any]:
-        """Configuración por defecto"""
-        return {
-            "version": 1,
-            "defaults": {
-                "temperature": 0.1,
-                "max_tokens": 8000, # Gemini tiene gran contexto
-                "timeout_ms": 60000
-            },
-            "actions": {
-                "triage_fast": {
-                    "model": "google/gemini-2.0-flash-exp",
-                    "prompt_file": "prompts/triage_fast.md",
-                    "temperature": 0.1,
-                    "max_tokens": 1000
-                },
-                "extract_strict": {
-                    "model": "google/gemini-2.0-flash-exp",
-                    "prompt_file": "prompts/extract_strict_json.md",
-                    "temperature": 0.0,
-                    "max_tokens": 8000
-                },
-                "extract_sql": {
-                    "model": "google/gemini-2.0-flash-exp",
-                    "prompt_file": "prompts/extract_sql.md",
-                    "temperature": 0.0,
-                    "max_tokens": 8000
-                },
-                "extract_python": {
-                    "model": "google/gemini-2.0-flash-exp",
-                    "prompt_file": "prompts/extract_python.md",
-                    "temperature": 0.0,
-                    "max_tokens": 8000
-                },
-                "summarize": {
-                    "model": "google/gemini-2.0-flash-exp",
-                    "prompt_file": "prompts/summarize.md",
-                    "temperature": 0.2,
-                    "max_tokens": 2000
-                }
-            },
-            "fallbacks": {
-                "extract_strict": [
-                    {
-                        "model": "meta-llama/llama-3-8b-instruct:free",
-                        "prompt_file": "prompts/extract_strict_json.md",
-                        "temperature": 0.0,
-                        "max_tokens": 2200
-                    }
-                ],
-                "extract_sql": [
-                    {
-                        "model": "meta-llama/llama-3-8b-instruct:free",
-                        "prompt_file": "prompts/extract_sql.md",
-                        "temperature": 0.0,
-                        "max_tokens": 2200
-                    }
-                ]
-            }
-        }
-    
+        # Resumen simplificado si falla todo
+        return {"actions": {}}
+
     def _validate_config(self):
-        """Valida que la configuración tenga la estructura correcta"""
-        required_keys = ["actions"]
-        for key in required_keys:
-            if key not in self.config:
-                raise ValueError(f"Missing required key '{key}' in models.yml")
-        
-        # Validar que cada acción tenga los campos requeridos
-        for action_name, action_config in self.config["actions"].items():
-            required_action_keys = ["model", "prompt_file"]
-            for key in required_action_keys:
-                if key not in action_config:
-                    raise ValueError(f"Action '{action_name}' missing required field '{key}'")
-    
+        if "actions" not in self.config:
+            self.config["actions"] = {}
+
     def get_action_config(self, action_name: str) -> ActionConfig:
-        """
-        Obtiene configuración para una acción específica
-        
-        Args:
-            action_name: Nombre de la acción (ej: 'triage_fast', 'extract_strict')
-            
-        Returns:
-            ActionConfig con configuración de la acción
-            
-        Raises:
-            ValueError: Si la acción no existe
-        """
         if action_name not in self.config["actions"]:
-            raise ValueError(f"Unknown action: '{action_name}'. Available actions: {list(self.config['actions'].keys())}")
-        
-        action_config = self.config["actions"][action_name]
+            # Fallback dinámico si la acción no está en el YAML pero queremos ejecutarla
+            print(f"[ROUTER] Warning: Action '{action_name}' not in config. Using defaults.")
+            # Standard model IDs for fallback
+            default_model = "google/gemini-3-flash-preview" if self.provider_name == "openrouter" else "llama-3.3-70b-versatile"
+            action_cfg = {
+                "model": default_model,
+                "prompt_file": f"prompts/{action_name.replace('.', '_')}.md" # Map dot to underscore for prompt files
+            }
+        else:
+            action_cfg = self.config["actions"][action_name]
+            # Si es un string (formato ultra simplificado v3), convertir a dict
+            if isinstance(action_cfg, str):
+                action_cfg = {"model": action_cfg}
+
         defaults = self.config.get("defaults", {})
         
         # Crear ModelConfig primario
         primary_config = ModelConfig(
-            model=action_config["model"],
-            prompt_file=action_config["prompt_file"],
-            temperature=action_config.get("temperature", defaults.get("temperature", 0.1)),
-            max_tokens=action_config.get("max_tokens", defaults.get("max_tokens", 1800)),
-            timeout_ms=action_config.get("timeout_ms", defaults.get("timeout_ms", 60000))
+            model=action_cfg.get("model", "unknown"),
+            prompt_file=action_cfg.get("prompt_file", f"prompts/{action_name}.md"),
+            provider=self.provider_name,
+            temperature=action_cfg.get("temperature", defaults.get("temperature", 0.1)),
+            max_tokens=action_cfg.get("max_tokens", defaults.get("max_tokens", 4000)),
+            timeout_ms=action_cfg.get("timeout_ms", defaults.get("timeout_ms", 60000))
         )
         
-        # Crear lista de fallbacks
+        print(f"[ROUTER] Resolved {action_name} -> {primary_config.model} (Provider: {primary_config.provider})")
+        
+        # Fallbacks
         fallbacks = []
         if "fallbacks" in self.config and action_name in self.config["fallbacks"]:
-            for fallback_config in self.config["fallbacks"][action_name]:
-                fallback_model = ModelConfig(
-                    model=fallback_config["model"],
-                    prompt_file=fallback_config["prompt_file"],
-                    temperature=fallback_config.get("temperature", defaults.get("temperature", 0.1)),
-                    max_tokens=fallback_config.get("max_tokens", defaults.get("max_tokens", 1800)),
-                    timeout_ms=fallback_config.get("timeout_ms", defaults.get("timeout_ms", 60000))
-                )
-                fallbacks.append(fallback_model)
+            for fb in self.config["fallbacks"][action_name]:
+                fallbacks.append(ModelConfig(
+                    model=fb["model"],
+                    prompt_file=fb.get("prompt_file", primary_config.prompt_file),
+                    provider=self.provider_name,
+                    temperature=fb.get("temperature", primary_config.temperature),
+                    max_tokens=fb.get("max_tokens", primary_config.max_tokens)
+                ))
         
-        return ActionConfig(
-            name=action_name,
-            primary=primary_config,
-            fallbacks=fallbacks
-        )
+        return ActionConfig(name=action_name, primary=primary_config, fallbacks=fallbacks)
     
     def get_fallback_chain(self, action_name: str) -> List[ModelConfig]:
         """

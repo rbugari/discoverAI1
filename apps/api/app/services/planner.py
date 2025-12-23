@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+import hashlib
 from datetime import datetime
 from typing import List, Dict
 from supabase import Client
@@ -24,6 +25,19 @@ class PlannerService:
         Scans the directory, generates a plan, persists it, and returns plan_id.
         """
         logger.info(f"Creating plan for Job {job_id} at {root_path}")
+        
+        # Fetch project_id and existing evidence
+        job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+        project_id = job_res.data.get("project_id")
+        
+        existing_evidence = {}
+        if project_id:
+            ev_res = self.supabase.table("evidence").select("file_path, hash").eq("project_id", project_id).execute()
+            for ev in ev_res.data:
+                path = ev["file_path"]
+                if path not in existing_evidence:
+                    existing_evidence[path] = set()
+                existing_evidence[path].add(ev["hash"])
         
         # 1. Create JobPlan Header
         plan_id = str(uuid.uuid4())
@@ -54,8 +68,18 @@ class PlannerService:
                 except OSError:
                     size_bytes = 0
                 
+                # Hash Check for Incremental Logic
+                file_hash = self._compute_hash(full_path)
+                is_duplicate = False
+                if rel_path in existing_evidence and file_hash in existing_evidence[rel_path]:
+                    is_duplicate = True
+                
                 # Policy Check
-                rec_action, reason = self.policy_engine.evaluate(rel_path, size_bytes)
+                if is_duplicate:
+                    rec_action = RecommendedAction.SKIP
+                    reason = "Unchanged (already processed)"
+                else:
+                    rec_action, reason = self.policy_engine.evaluate(rel_path, size_bytes)
                 
                 # Classification & Strategy
                 area_key, strategy = self._classify_file(rel_path, rec_action)
@@ -78,6 +102,7 @@ class PlannerService:
                     "strategy": strategy,
                     "recommended_action": rec_action,
                     "enabled": rec_action == RecommendedAction.PROCESS,
+                    "file_hash": file_hash,
                     "order_index": 0, # To be refined later
                     "estimate": est
                 }
@@ -130,6 +155,17 @@ class PlannerService:
             area_map[a["key"]] = area_id
             
         return area_map
+
+    def _compute_hash(self, file_path: str) -> str:
+        """Calcula el hash SHA256 de un archivo"""
+        hasher = hashlib.sha256()
+        try:
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    hasher.update(chunk)
+            return hasher.hexdigest()
+        except:
+            return ""
 
     def _classify_file(self, path: str, rec_action: RecommendedAction) -> tuple[AreaKey, Strategy]:
         """Heuristic classification"""

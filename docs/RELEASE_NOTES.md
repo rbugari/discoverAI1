@@ -1,42 +1,34 @@
 # Release Notes - Nexus Discovery v3.1
 
-**Date:** December 22, 2025
-**Theme:** "Plan, Control & Optimize"
+**Date:** December 23, 2025
+**Theme:** "Performance & Precision"
 
 ## 🌟 Highlights
 
-DiscoverAI v3.1 introduces a fundamental shift in how we process data repositories. Instead of "blindly" analyzing every file, we now use a **Plan-Driven Orchestrator**. This allows users to review the scope, cost, and strategy before execution begins.
+DiscoverAI v3.1 finalizes the **Plan-Driven Orchestrator** and stabilizes the extraction engine.
 
-### 1. Planning Phase & Review UI
-- **Pre-flight Scan**: When you upload a ZIP or Repo, the system now creates a "Job Plan" in seconds.
-- **Review Dashboard**: A new UI lets you see exactly what files will be processed.
-- **Cost Estimation**: See estimated Token usage, Cost (USD), and Time for the entire job and per-file.
-- **Control**: Toggle files ON/OFF or reorder them (e.g., prioritize Schema files before ETLs).
+### 1. Multi-provider & Dynamic Routing
+- **Provider Agnostic**: The system can now route different files to different LLM providers (OpenRouter, Groq, Anthropic) based on cost and capability.
+- **Dynamic Config**: Admins can switch models and providers at runtime via a centralized configuration system.
 
-### 2. Hybrid Parsing (SSIS & DataStage)
-- **Problem**: Sending huge XML files to LLMs is slow, expensive, and error-prone.
-- **Solution**: We implemented a native Python parser for `.dtsx` files that extracts the structure (Control Flow) locally.
-- **Result**: The LLM only receives the relevant metadata and SQL queries, reducing token usage by ~60% and improving accuracy.
+### 2. Truly Incremental Processing
+- **Hash Tracking**: Each file's hash is stored. Retrying or updating a solution now skips unchanged files automatically, saving tokens and money.
 
-### 3. Reprocessing Modes
-- **Incremental Update**: Re-run analysis on a solution to pick up new files or retry failed ones without deleting existing history.
-- **Full Clean**: A "Nuclear Option" in the UI to wipe all data for a solution and start fresh (useful for testing new prompts).
-
-### 4. Smart Policy Engine
-- **Noise Reduction**: Automatically ignores `.git/`, `node_modules/`, `__pycache__/`, and binary files.
-- **Security**: Prevents processing of potential secrets files (config.json, .env) unless explicitly allowed (future).
+### 3. UX Consolidation
+- **Optimized Dashboard**: Fast solution loading using a new consolidated `/active-plan` endpoint.
+- **Direct Actions**: "View Graph" and "View Catalog" buttons added to the dashboard.
+- **Graph Filtering**: Built-in filters to isolate lineage by node type (Table, Pipeline, etc.).
 
 ## 🛠 Technical Improvements
-- **New Tables**: `job_plan`, `job_plan_area`, `job_plan_item` in Supabase.
-- **Validation**: Strict JSON Schema enforcement for all LLM outputs to prevent "hallucinated" fields.
-- **Upsert Logic**: Catalog service now supports idempotent writes (updating existing assets instead of duplicating).
+- **Extraction Success**: Achieved 100% success rate (43/43) on large SSIS packages using optimized Gemini-2.0 routes.
+- **Neo4j Sync**: Reliable background synchronization between relation graph and SQL warehouse.
 
 ## 🐛 Bug Fixes
-- Fixed issue where SSIS extraction failed silently due to missing parser import.
-- Fixed "Assets = 0" bug caused by strict Pydantic validation on optional fields.
-- Fixed Dashboard date display to show "Last Run" instead of creation date.
+- **Audit System**: Fixed a critical `chk_strategy` constraint violation and ID mismatch in the auditing layer.
+- **Cleanup**: Improved "Full Re-analyze" mode to reliably clean Neo4j, plans, and audit logs.
+- **Constraint Fix**: Resolved strategy mapping issues (SQL enum mismatches).
 
 ## 🔜 What's Next (v3.2)
-- PDF/CSV Export for documentation.
-- Graph Visualization filters.
-- Real-time WebSocket progress bar.
+- Advanced RAG over lineage (Impact Analysis chat).
+- Column-level lineage visualization.
+- PDF Export for technical documentation.

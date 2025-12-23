@@ -64,6 +64,9 @@ class PipelineOrchestrator:
     """
     
     def __init__(self, supabase_client=None):
+        print("\n" + "="*50)
+        print("!!! MEGA TRACE: PipelineOrchestrator INIT !!!")
+        print("="*50)
         self.router = get_model_router()
         self.logger = FileProcessingLogger(supabase_client)
         self.action_runner = ActionRunner(self.logger)
@@ -162,6 +165,10 @@ class PipelineOrchestrator:
         # Sort items: Area Order ASC, Item Order ASC
         items.sort(key=lambda x: (area_order_map.get(x["area_id"], 999), x["order_index"]))
         
+        if settings.DEBUG_MAX_ITEMS > 0:
+            print(f"[PIPELINE v3] DEBUG MODE: Limiting execution to top {settings.DEBUG_MAX_ITEMS} items.")
+            items = items[:settings.DEBUG_MAX_ITEMS]
+            
         total_items = len(items)
         print(f"[PIPELINE v3] Executing {total_items} items from plan.")
         
@@ -214,19 +221,24 @@ class PipelineOrchestrator:
 
     def _process_item_v3(self, job_id: str, item: Dict, content: str, full_path: str) -> ProcessingResult:
         start_time = time.time()
-        strategy = item["strategy"]
+        strategy = item.get("strategy")
+        print(f"!!! MEGA TRACE: _process_item_v3 - Strategy: {strategy} (Type: {type(strategy)})")
         
         try:
-            if strategy == Strategy.SKIP:
+            # Check strategy against enum values or strings
+            strategy_val = strategy.value if hasattr(strategy, 'value') else strategy
+            
+            if strategy_val == Strategy.SKIP or strategy_val == "SKIP":
+                 print(f"!!! MEGA TRACE: Strategy is SKIP for {item['path']}")
                  return ProcessingResult(True, item["path"], "SKIP", "skipped")
             
-            elif strategy == Strategy.PARSER_ONLY:
-                # Use native parsers
+            elif strategy_val == Strategy.PARSER_ONLY or strategy_val == "PARSER_ONLY":
+                print(f"!!! MEGA TRACE: Strategy is PARSER_ONLY for {item['path']}")
                 return self._create_success_result(item["path"], "PARSER_ONLY", 
                                                  self._extract_with_native_parser(job_id, full_path, content), start_time)
             
-            elif strategy in [Strategy.LLM_ONLY, Strategy.PARSER_PLUS_LLM]:
-                # Use LLM
+            elif strategy_val in [Strategy.LLM_ONLY, Strategy.PARSER_PLUS_LLM, "LLM_ONLY", "PARSER_PLUS_LLM"]:
+                print(f"!!! MEGA TRACE: Strategy is LLM-based ({strategy_val}) for {item['path']}")
                 # Determine Action Profile based on file type / item type
                 action_name = self._determine_action_profile(item)
                 
@@ -235,12 +247,16 @@ class PipelineOrchestrator:
                 if res.success:
                      return self._create_success_result(item["path"], strategy, res, start_time)
                 else:
+                     print(f"!!! MEGA TRACE: _extract_with_llm FAILED for {item['path']}: {res.error_message}")
                      return self._create_error_result(item["path"], strategy, res, start_time)
                      
             else:
+                print(f"!!! MEGA TRACE: UNKNOWN STRATEGY hit: {strategy_val}")
                 return ProcessingResult(False, item["path"], strategy, "error", error_message=f"Unknown strategy {strategy}")
 
         except Exception as e:
+             print(f"!!! MEGA TRACE: EXCEPTION in _process_item_v3 for {item['path']}: {str(e)}")
+             traceback.print_exc()
              return ProcessingResult(False, item["path"], strategy, "error", error_message=str(e))
 
     def _determine_action_profile(self, item: Dict) -> str:
@@ -248,15 +264,13 @@ class PipelineOrchestrator:
         ft = item.get("file_type", "").upper()
         
         if ft in ["SQL", "DDL"]:
-            return "extract_schema" # v3 profile
+            return "extract.schema" # v3 profile (dotted)
         elif ft in ["DTSX", "DSX"]:
-            return "extract_lineage_package" # v3 profile
+            return "extract.lineage.package" # v3 profile (dotted)
         elif ft in ["PY", "IPYNB"]:
-            return "extract_lineage_sql" # Use SQL/DML extractor for code logic? Or generic python?
-            # For v3, let's use extract_strict as fallback or specific python one.
-            return "extract_python"
+            return "extract.python" # v3 profile (dotted)
         else:
-            return "extract_strict" # Fallback
+            return "extract.strict" # Fallback (dotted)
 
     # --- Reused Methods from v2 (Private) ---
     # Copied helper methods like _execute_stage, _ingest_artifact, _persist_results, etc.
@@ -294,37 +308,42 @@ class PipelineOrchestrator:
          nodes = [{"node_id": t, "node_type": "table", "name": t, "system": "sql"} for t in tables]
          return ActionResult(success=True, data={"nodes": nodes, "edges": []})
 
-    def _extract_with_llm(self, job_id: str, file_path: str, content: str, action_name: str = "extract_strict") -> ActionResult:
+    def _extract_with_llm(self, job_id: str, file_path: str, content: str, action_name: str = "extract.strict") -> ActionResult:
         # Same as v2 but accepts action_name
         
         # Enhanced Logic for SSIS/Packages (Deep Inspection)
-        if action_name == "extract_lineage_package" and (file_path.lower().endswith(".dtsx") or file_path.lower().endswith(".xml")):
+        if action_name == "extract.lineage.package" and (file_path.lower().endswith(".dtsx") or file_path.lower().endswith(".xml")):
             try:
                 print(f"[PIPELINE v3] Running Deep Package Inspection (SSIS Parser) for {file_path}")
                 structure = SSISParser.parse_structure(content)
                 # Append structure to content to guide LLM
-                content = f"{content}\n\n=== AUTOMATICALLY EXTRACTED STRUCTURE ===\n{json.dumps(structure, indent=2)}"
+                content = f"XML STRUCTURE SUMMARY:\n{json.dumps(structure, indent=2)}\n\nRAW CONTENT:\n{content}"
             except Exception as e:
-                print(f"[PIPELINE v3] SSIS Parser failed (falling back to raw LLM): {e}")
+                print(f"[PIPELINE] SSIS Parser failed for {file_path}: {e}")
 
-        llm_input = {
-            "file_path": file_path,
-            "content": content,
-            "file_extension": Path(file_path).suffix,
-        }
-        context = {"job_id": job_id, "file_path": file_path, "stage": "extraction"}
+        # Strategy Selection
+        llm_input = {"content": content[:settings.MAX_CONTENT_CHARS], "extension": Path(file_path).suffix}
+        context = {"job_id": job_id, "file_path": file_path}
         
-        # WORKAROUND: Map new action to 'extract_strict' for logging to bypass DB constraint if not updated
-        log_action_name = action_name
-        if action_name == "extract_lineage_package":
+        # Audit Start
+        log_action_name = action_name.replace(".", "_")
+        if action_name == "extract.lineage.package":
             log_action_name = "extract_strict"
             
         log_id = self.logger.start_file_processing(job_id, file_path, log_action_name, len(content))
         
+        
+        print(f"!!! MEGA TRACE: Calling ActionRunner for {action_name} (File: {file_path})")
         result = self.action_runner.run_action(action_name, llm_input, context, log_id)
+        print(f"!!! MEGA TRACE: ActionRunner Result: Success={result.success}, Model={result.model_used}")
         
         if result.success:
-            self.logger.complete_file_processing(log_id, "success", "llm")
+            # Audit Completion with correct strategy name for DB constraint
+            # Map back to enum strings if they are what's expected
+            strat_for_audit = "LLM_ONLY"
+            if action_name == "extract.schema": strat_for_audit = "PARSER_PLUS_LLM"
+            
+            self.logger.complete_file_processing(log_id, "success", strat_for_audit)
         else:
              self.logger.log_file_error(log_id, "llm_error", result.error_message)
         return result
@@ -409,5 +428,44 @@ class PipelineOrchestrator:
     def _get_metrics_summary(self):
         return f"Files: {self.metrics.successful_files}/{self.metrics.total_files}"
 
-    def _update_graph(self, job_id, results):
-        pass
+    def _update_graph(self, job_id: str, results: List[ProcessingResult]):
+        """Sincroniza los resultados con Neo4j si está configurado"""
+        from ..services.graph import get_graph_service
+        
+        try:
+            job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+            project_id = job_res.data.get("project_id")
+            
+            graph_svc = get_graph_service()
+            print(f"[PIPELINE] Syncing {len(results)} file results to Graph...")
+            
+            for res in results:
+                if not res.success or not res.data:
+                    continue
+                
+                # Sincronizar Nodos
+                for node in res.data.get("nodes", []):
+                    # Inyectar project_id para filtrado posterior
+                    node["project_id"] = project_id
+                    node["solution_id"] = project_id # Compatibilidad
+                    
+                    label = "Asset"
+                    # Mapear tipo a Etiqueta si es necesario, o usar Asset genérico
+                    graph_svc.upsert_node(label, node)
+                
+                # Sincronizar Relaciones
+                for edge in res.data.get("edges", []):
+                    # En Neo4j las relaciones necesitan que los nodos existan
+                    # upsert_relationship en Neo4jGraphService usa MATCH + MERGE basado en IDs
+                    source_props = {"id": edge.get("from_node_id") or edge.get("source_id")}
+                    target_props = {"id": edge.get("to_node_id") or edge.get("target_id")}
+                    rel_type = edge.get("edge_type", "DEPENDS_ON")
+                    
+                    if source_props["id"] and target_props["id"]:
+                        graph_svc.upsert_relationship(source_props, target_props, rel_type)
+            
+            print(f"[PIPELINE] Graph Sync Completed.")
+            
+        except Exception as e:
+            print(f"[PIPELINE ERROR] Graph Sync Failed: {e}")
+            traceback.print_exc()

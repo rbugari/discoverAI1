@@ -59,25 +59,20 @@ export default function PlanReviewPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchPlan = async () => {
       try {
-        // 1. Get Stats to find active job & plan_id
-        const statsRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${solutionId}/stats`);
-        const activeJob = statsRes.data.active_job;
+        const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${solutionId}/active-plan`);
         
-        if (activeJob && activeJob.plan_id) {
-            // 2. Fetch Plan
-            const planRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/plans/${activeJob.plan_id}`);
-            setPlan(planRes.data);
+        if (res.data.plan) {
+            setPlan(res.data.plan);
             
             // Expand all areas by default
             const initialExpanded: Record<string, boolean> = {};
-            planRes.data.areas.forEach((a: any) => initialExpanded[a.area_id] = true);
+            res.data.plan.areas.forEach((a: any) => initialExpanded[a.area_id] = true);
             setExpandedAreas(initialExpanded);
         } else {
-            // No plan found, maybe redirect back?
             console.warn("No active plan found for this solution.");
         }
       } catch (e) {
-        console.error(e);
+        console.error("Error fetching active-plan:", e);
       } finally {
         setLoading(false);
       }

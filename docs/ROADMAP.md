@@ -4,8 +4,11 @@
 - [x] **Planning Phase**: New orchestrator stage that scans files and generates an execution plan before spending tokens.
 - [x] **Human-in-the-Loop UI**: Dashboard allows reviewing, enabling/disabling files, and reordering processing.
 - [x] **Hybrid Parsing**: Native SSIS (.dtsx) XML parser combined with LLM for cost-effective lineage.
-- [x] **Incremental Reprocessing**: Option to "Update" existing solutions or "Full Clean" via UI.
+- [x] **Incremental Reprocessing**: Option to "Update" existing solutions or "Full Clean" via the UI.
+- [x] **Truly Incremental**: Hash-based logic to skip unchanged files and save costs.
+- [x] **Multi-provider Routing**: Support for Gemini, Llama, and more via Groq/OpenRouter.
 - [x] **Policy Engine**: Auto-ignore `.git`, `node_modules`, and binary files.
+- [x] **Graph Filters**: Node type filtering in the Graph View.
 - [x] **Schema Extraction**: Specialized prompts for SQL/DDL parsing.
 
 ## Known Issues
@@ -18,12 +21,10 @@
 
 ## Future Roadmap (Next Release v3.2+)
 
-### 1. UX Improvements
 - **Real-time Progress Bar:** Replace the static "Processing" badge with a WebSocket or Polling-based progress bar showing:
   - "Unzipping..."
   - "Analyzing file 5/50..."
   - "Building Graph..."
-- **Graph Filters:** Add dropdowns to filter the graph by Node Type (Table, Pipeline, etc.) to reduce clutter.
 
 ### 2. Advanced Lineage
 - **Column-Level Lineage:** Visualize dependencies between specific columns (e.g., `TableA.Col1 -> ETL -> TableB.Col2`).

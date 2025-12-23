@@ -115,3 +115,48 @@ async def approve_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     queue.enqueue_job(job_id)
     
     return {"status": "approved", "job_id": job_id}
+@router.get("/solutions/{solution_id}/active-plan")
+async def get_active_plan(solution_id: str, supabase: Client = Depends(get_supabase)):
+    """
+    Optimized endpoint that returns the active job and its full plan in one call.
+    """
+    # 1. Fetch Active Job
+    job_res = supabase.table("job_run")\
+        .select("job_id, plan_id, status, progress_pct, current_stage")\
+        .eq("project_id", solution_id)\
+        .in_("status", ["queued", "running", "planning_ready"])\
+        .order("created_at", desc=True)\
+        .limit(1)\
+        .execute()
+    
+    if not job_res.data:
+        return {"job": None, "plan": None}
+    
+    job = job_res.data[0]
+    plan_id = job.get("plan_id")
+    
+    if not plan_id:
+        return {"job": job, "plan": None}
+    
+    # 2. Fetch Plan, Areas, and Items in Parallel (as much as supabase-client allows)
+    # Actually we just fetch them sequentially but it's much faster than separate HTTP calls from frontend
+    plan_res = supabase.table("job_plan").select("*").eq("plan_id", plan_id).single().execute()
+    areas_res = supabase.table("job_plan_area").select("*").eq("plan_id", plan_id).order("order_index").execute()
+    items_res = supabase.table("job_plan_item").select("*").eq("plan_id", plan_id).order("order_index").execute()
+    
+    plan_data = plan_res.data
+    areas = areas_res.data
+    items = items_res.data
+    
+    # Build Hierarchy
+    area_map = {a["area_id"]: {**a, "items": []} for a in areas}
+    for item in items:
+        if item["area_id"] in area_map:
+            area_map[item["area_id"]]["items"].append(item)
+            
+    plan_data["areas"] = list(area_map.values())
+    
+    return {
+        "job": job,
+        "plan": plan_data
+    }

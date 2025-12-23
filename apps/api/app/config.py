@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     
     # Storage
     UPLOAD_DIR: str = os.path.join(os.getcwd(), "temp_uploads")
+    
+    # Limits
+    MAX_CONTENT_CHARS: int = 32000
+    MAX_FILES_PER_JOB: int = 500
+    DEBUG_MAX_ITEMS: int = 0 # 0 means no limit. Set to 10 for quick testing.
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".env"),
