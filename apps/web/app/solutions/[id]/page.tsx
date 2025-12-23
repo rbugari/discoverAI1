@@ -503,6 +503,18 @@ function GraphContent({ id, solution }: { id: string, solution: any }) {
                         </div>
 
                         <div className="space-y-6">
+                            {/* Business Intent Section (New) */}
+                            {selectedNode.data.business_intent && (
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                                        <Focus size={16} /> Business Intent
+                                    </h3>
+                                    <div className="bg-primary/5 p-4 rounded-lg text-sm text-foreground border border-primary/10 italic">
+                                        "{selectedNode.data.business_intent}"
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Summary Section */}
                             {selectedNode.data.summary && (
                                 <div>
@@ -511,6 +523,20 @@ function GraphContent({ id, solution }: { id: string, solution: any }) {
                                     </h3>
                                     <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground leading-relaxed">
                                         {selectedNode.data.summary}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Transformation Logic (New for Tasks) */}
+                            {selectedNode.data.transformation_logic && (
+                                <div>
+                                    <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                                        <Settings size={16} /> Transformation Logic
+                                    </h3>
+                                    <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto border border-white/10 shadow-inner">
+                                        <pre className="text-xs text-blue-300 font-mono leading-relaxed whitespace-pre-wrap">
+                                            {selectedNode.data.transformation_logic}
+                                        </pre>
                                     </div>
                                 </div>
                             )}
@@ -538,16 +564,30 @@ function GraphContent({ id, solution }: { id: string, solution: any }) {
                                                 <tr>
                                                     <td className="bg-muted/30 px-3 py-2 text-muted-foreground font-medium align-top">Columns</td>
                                                     <td className="px-3 py-2">
-                                                        <ul className="list-disc list-inside text-xs space-y-1 text-muted-foreground">
-                                                            {selectedNode.data.columns.map((col: string, i: number) => (
-                                                                <li key={i} className="break-words">{col}</li>
-                                                            ))}
+                                                        <ul className="space-y-2 list-none text-xs">
+                                                            {selectedNode.data.columns.map((col: any, i: number) => {
+                                                                const isObj = typeof col === 'object';
+                                                                return (
+                                                                    <li key={i} className="pb-2 border-b border-border/50 last:border-0">
+                                                                        <div className="font-bold text-foreground">
+                                                                            {isObj ? col.name : col}
+                                                                            {isObj && col.type && <span className="ml-1 text-[10px] text-muted-foreground uppercase">({col.type})</span>}
+                                                                        </div>
+                                                                        {isObj && col.logic && (
+                                                                            <div className="text-muted-foreground mt-0.5 italic">{col.logic}</div>
+                                                                        )}
+                                                                        {isObj && col.source && (
+                                                                            <div className="text-[10px] text-primary/70 font-mono mt-0.5">Src: {col.source}</div>
+                                                                        )}
+                                                                    </li>
+                                                                );
+                                                            })}
                                                         </ul>
                                                     </td>
                                                 </tr>
                                             ) : (
                                                 /* Fallback for tables without detected columns */
-                                                (selectedNode.data.type === 'TABLE' || selectedNode.data.type === 'DATABASE') && (
+                                                (selectedNode.data.type === 'TABLE' || selectedNode.data.type === 'DATABASE' || selectedNode.data.type === 'VIEW') && (
                                                     <tr>
                                                         <td className="bg-muted/30 px-3 py-2 text-muted-foreground font-medium align-top">Columns</td>
                                                         <td className="px-3 py-2 text-xs text-muted-foreground italic">

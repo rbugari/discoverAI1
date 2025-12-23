@@ -248,6 +248,10 @@ Representa cualquier nodo en el grafo de conocimiento (Tabla, Archivo, Columna, 
 - **name_display**: Nombre legible.
 - **canonical_name**: Nombre único/técnico.
 - **system**: Sistema de origen (ej. 'SQLServer', 'SSIS').
+- **tags**: JSONB con metadata enriquecida por la IA:
+    - `business_intent`: Propósito funcional del activo.
+    - `transformation_logic`: Lógica de procesamiento/filtros (en lenguaje técnico/SQL).
+    - `columns`: Listado de columnas con mapeo y lógica individual.
 
 #### `edge_index`
 Representa las relaciones (aristas) entre activos.

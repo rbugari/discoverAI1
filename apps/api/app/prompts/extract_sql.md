@@ -43,6 +43,8 @@ Eres un experto en SQL y linaje de datos. Analiza este script SQL y extrae:
         "schema": "dbo",
         "operation": "read",
         "columns": ["customer_id", "name", "email"],
+        "transformation_logic": "Filter by active status",
+        "business_intent": "Synchronize active customers to target",
         "line_number": 15
       }
     }

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  useReactTable, 
-  getCoreRowModel, 
-  getFilteredRowModel, 
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
   getPaginationRowModel,
   flexRender,
-  ColumnDef 
+  ColumnDef
 } from '@tanstack/react-table';
 import { Loader2, Search, Filter, Database, FileText, Activity, Table, Code, Box, Layers } from 'lucide-react';
 import Link from 'next/link';
@@ -77,7 +77,7 @@ export default function CatalogPage({ params }: CatalogPageProps) {
       cell: info => {
         const val = (info.getValue() as string).toUpperCase();
         const colors = NODE_COLORS[val] || NODE_COLORS['DEFAULT'];
-        
+
         let Icon = FileText;
         if (val === 'TABLE' || val === 'VIEW') Icon = Table;
         if (val === 'PIPELINE' || val === 'PROCESS') Icon = Activity;
@@ -86,17 +86,17 @@ export default function CatalogPage({ params }: CatalogPageProps) {
         if (val === 'PACKAGE') Icon = Box;
 
         return (
-            <span 
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border"
-                style={{ 
-                    backgroundColor: colors.bg, 
-                    borderColor: colors.border,
-                    color: colors.text 
-                }}
-            >
-                <Icon size={12} />
-                {val}
-            </span>
+          <span
+            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border"
+            style={{
+              backgroundColor: colors.bg,
+              borderColor: colors.border,
+              color: colors.text
+            }}
+          >
+            <Icon size={12} />
+            {val}
+          </span>
         );
       }
     },
@@ -109,9 +109,9 @@ export default function CatalogPage({ params }: CatalogPageProps) {
       accessorKey: 'system',
       header: 'System',
       cell: info => (
-          <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded dark:bg-zinc-800">
-              {info.getValue() as string || 'N/A'}
-          </span>
+        <span className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded dark:bg-zinc-800">
+          {info.getValue() as string || 'N/A'}
+        </span>
       )
     },
     {
@@ -167,7 +167,7 @@ export default function CatalogPage({ params }: CatalogPageProps) {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <select 
+            <select
               className="h-9 rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none"
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
@@ -210,26 +210,27 @@ export default function CatalogPage({ params }: CatalogPageProps) {
                 table.getRowModel().rows.map(row => {
                   const assetType = (row.original.asset_type || 'DEFAULT').toUpperCase();
                   const colors = NODE_COLORS[assetType] || NODE_COLORS['DEFAULT'];
-                  
+
                   return (
-                  <tr 
-                    key={row.id} 
-                    onClick={() => handleRowClick(row.original)}
-                    className={`border-b hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${selectedAsset?.asset_id === row.original.asset_id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                    style={{ borderLeft: `4px solid ${colors.border}` }}
-                  >
-                    {row.getVisibleCells().map(cell => (
-                      <td key={cell.id} className="px-6 py-4 whitespace-nowrap">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                )})
+                    <tr
+                      key={row.id}
+                      onClick={() => handleRowClick(row.original)}
+                      className={`border-b hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${selectedAsset?.asset_id === row.original.asset_id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                      style={{ borderLeft: `4px solid ${colors.border}` }}
+                    >
+                      {row.getVisibleCells().map(cell => (
+                        <td key={cell.id} className="px-6 py-4 whitespace-nowrap">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
         </div>
-        
+
         {/* Pagination */}
         <div className="flex items-center justify-end gap-2 py-4">
           <span className="text-sm text-gray-500">
@@ -266,32 +267,89 @@ export default function CatalogPage({ params }: CatalogPageProps) {
             <div className="flex justify-center py-10"><Loader2 className="animate-spin" /></div>
           ) : details ? (
             <div className="space-y-6">
-              {/* Attributes */}
+              {/* Business Intent (New) */}
+              {selectedAsset.tags?.business_intent && (
+                <div>
+                  <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <Activity size={14} /> Business Intent
+                  </h3>
+                  <div className="bg-primary/5 p-4 rounded-lg text-sm text-foreground border border-primary/10 italic">
+                    "{selectedAsset.tags.business_intent}"
+                  </div>
+                </div>
+              )}
+
+              {/* Transformation Logic (New for Tasks) */}
+              {selectedAsset.tags?.transformation_logic && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <Code size={14} /> Transformation Logic
+                  </h3>
+                  <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto border border-white/10 shadow-inner">
+                    <pre className="text-xs text-blue-300 font-mono leading-relaxed whitespace-pre-wrap">
+                      {selectedAsset.tags.transformation_logic}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {/* Attributes & Columns */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Attributes</h3>
-                <div className="bg-gray-50 dark:bg-zinc-800 p-3 rounded text-sm space-y-1">
-                  <div className="flex justify-between">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Database size={14} /> Metadata & Schema
+                </h3>
+                <div className="bg-gray-50 dark:bg-zinc-800 p-3 rounded text-sm space-y-3">
+                  <div className="flex justify-between border-b border-border/50 pb-1">
                     <span className="text-gray-500">Type:</span>
                     <span className="font-medium">{selectedAsset.asset_type}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between border-b border-border/50 pb-1">
                     <span className="text-gray-500">System:</span>
                     <span className="font-medium">{selectedAsset.system || 'Unknown'}</span>
                   </div>
-                  {/* Dynamic Tags */}
-                  {selectedAsset.tags && Object.entries(selectedAsset.tags).map(([k, v]) => (
-                    <div key={k} className="flex justify-between">
-                      <span className="text-gray-500 capitalize">{k}:</span>
-                      <span className="font-medium truncate max-w-[200px]" title={String(v)}>{String(v)}</span>
+
+                  {/* Enhanced Columns Display */}
+                  {selectedAsset.tags?.columns && Array.isArray(selectedAsset.tags.columns) && (
+                    <div className="pt-2">
+                      <span className="text-gray-500 text-xs font-bold block mb-2">COLUMNS:</span>
+                      <ul className="space-y-2 list-none text-xs">
+                        {selectedAsset.tags.columns.map((col: any, i: number) => {
+                          const isObj = typeof col === 'object' && col !== null;
+                          return (
+                            <li key={i} className="pb-2 border-b border-border/30 last:border-0">
+                              <div className="font-bold text-foreground">
+                                {isObj ? col.name : col}
+                                {isObj && col.type && <span className="ml-1 text-[10px] text-muted-foreground uppercase">({col.type})</span>}
+                              </div>
+                              {isObj && col.logic && (
+                                <div className="text-muted-foreground mt-0.5 italic">{col.logic}</div>
+                              )}
+                              {isObj && col.source && (
+                                <div className="text-[10px] text-primary/70 font-mono mt-0.5">Src: {col.source}</div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
-                  ))}
+                  )}
+
+                  {/* Other Tags */}
+                  {selectedAsset.tags && Object.entries(selectedAsset.tags)
+                    .filter(([k]) => !['columns', 'transformation_logic', 'business_intent', 'business_rule'].includes(k))
+                    .map(([k, v]) => (
+                      <div key={k} className="flex justify-between pt-1">
+                        <span className="text-gray-500 capitalize">{k}:</span>
+                        <span className="font-medium truncate max-w-[200px]" title={String(v)}>{String(v)}</span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
               {/* Relationships */}
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Relationships</h3>
-                
+
                 {details.outgoing_edges?.length > 0 && (
                   <div className="mb-4">
                     <span className="text-xs font-medium text-blue-600 mb-1 block">Outgoing (Depends On / Writes To)</span>
@@ -329,7 +387,7 @@ export default function CatalogPage({ params }: CatalogPageProps) {
                     </ul>
                   </div>
                 )}
-                
+
                 {(!details.outgoing_edges?.length && !details.incoming_edges?.length) && (
                   <p className="text-sm text-gray-400 italic">No relationships found.</p>
                 )}

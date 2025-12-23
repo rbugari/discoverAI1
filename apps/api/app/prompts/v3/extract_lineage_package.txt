@@ -15,7 +15,11 @@ You must return a valid JSON object matching this exact structure:
       "node_type": "package",
       "name": "Package Name",
       "system": "SSIS|DATASTAGE",
-      "attributes": { "description": "..." }
+      "attributes": { 
+          "description": "...",
+          "business_intent": "What is the specific goal of this process? Why is it being done?",
+          "workflow_logic": "Summary of the overall control sequence"
+      }
     },
     {
       "node_id": "package_name.task_name",
@@ -25,7 +29,21 @@ You must return a valid JSON object matching this exact structure:
       "parent_node_id": "package_name",
       "attributes": {
         "task_type": "ExecuteSQL|DataFlow|FileSystem|Script",
-        "description": "string"
+        "transformation_logic": "Deep dive into the SQL or logic used. Include JOINs, WHERE clauses, and specific filters.",
+        "business_rule": "The functional requirement this step satisfies",
+        "columns": [
+            {"name": "column_a", "type": "string", "source": "original_table.col", "logic": "direct mapping or calculation"}
+        ]
+      }
+    },
+    {
+      "node_id": "target_table_id",
+      "node_type": "table",
+      "name": "dbo.TargetTable",
+      "system": "sqlserver",
+      "attributes": {
+          "columns": ["col1", "col2", "col3"],
+          "schema": "dbo"
       }
     }
   ],
@@ -36,11 +54,17 @@ You must return a valid JSON object matching this exact structure:
       "to_node_id": "target_table_or_task",
       "edge_type": "READS_FROM|WRITES_TO|PRECEDES", 
       "confidence": 1.0,
-      "rationale": "Explanation of why this edge exists based on the code",
+      "rationale": "Explanation based on the transformation logic",
       "is_hypothesis": false
     }
   ]
 }
+
+# KEY REQUIREMENT: THE 'HOW' AND 'WHY'
+For every DataFlow or ExecuteSQL task, you MUST extract:
+- The exact SQL logic (or as close as possible).
+- The mapping of columns from Source to Target.
+- The business purpose of the step.
 
 # EDGE TYPES
 - PRECEDES: Use for Control Flow (Task A -> Task B).
