@@ -1,4 +1,4 @@
-# Nexus Discovery - Functional Specification (v1.0)
+# Nexus Discovery - Functional Specification (v3.1)
 
 ## 1. Executive Summary
 **Nexus Discovery** is an AI-powered Reverse Engineering & Data Lineage platform designed to accelerate the understanding, documentation, and migration of complex data ecosystems. 
@@ -16,7 +16,12 @@ By leveraging Generative AI (LLMs) and Graph Database technology, Nexus Discover
 *   **Migration Engineers:** To deconstruct legacy ETL pipelines (e.g., SSIS) and re-implement them in modern platforms (e.g., Databricks, dbt).
 *   **Data Stewards/Governance Officers:** To discover data flows and ensure compliance.
 
-## 4. Key Features (Release v1.0)
+## 4. Key Features (Release v3.1)
+
+### 4.0. Plan-Driven Orchestration & Incremental Updates
+*   **Discovery Phase**: A light-speed scan identifies file types and strategies before deep analysis.
+*   **Review Dashboard**: Users approve the execution plan, categorize files, and manage costs.
+*   **Truly Incremental**: SHA256 hashing allows skipping unchanged files, saving time and tokens.
 
 ### 4.1. Intelligent Code Ingestion
 *   **Multi-Format Support:** Natively parses and analyzes:
