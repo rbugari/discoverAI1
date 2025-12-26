@@ -47,7 +47,7 @@ Principio rector:
 - Generación de un **Plan de ejecución**
 - Estimación de coste/tiempo
 - Agrupación + orden + estrategia
-- Aprobación explícita del usuario
+- **Silent Mode**: Ejecución directa opcional (`requires_approval: false`).
 
 ### Fase B — Execution (v3)
 - Ejecución guiada por el plan
@@ -55,9 +55,9 @@ Principio rector:
 - Lineage macro con evidencia
 
 ### Fase C — Deep Understanding (v4)
-- Subgrafo por paquete
-- Transformaciones internas
-- Representación intermedia (IR)
+- **Package Deep Dive**: Extracción de componentes internos (.dtsx, .dsx)
+- **Transformation IR**: Modelo común de transformaciones lógico-físicas
+- **Column-level Lineage**: Trazabilidad detallada de campos y reglas
 - Base para migración y data products
 
 ---

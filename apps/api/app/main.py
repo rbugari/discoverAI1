@@ -231,7 +231,7 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
             "project_id": solution_id,
             "status": "queued",
             "current_stage": "ingest",
-            "requires_approval": True
+            "requires_approval": False
         }
         res = supabase.table("job_run").insert(job_data).execute()
         new_job_id = res.data[0]["job_id"]

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from supabase import create_client
 
 from ..models.extraction import ExtractionResult, ExtractedNode, ExtractedEdge, Evidence, Locator
+from ..models.deep_dive import DeepDiveResult, Package, PackageComponent, TransformationIR, ColumnLineage
 from ..models.planning import JobPlanStatus, RecommendedAction, Strategy
 from ..router import get_model_router
 from ..audit import FileProcessingLogger
@@ -110,7 +111,7 @@ class PipelineOrchestrator:
             current_plan_id = job_data.data.get("plan_id")
             requires_approval = job_data.data.get("requires_approval")
             if requires_approval is None:
-                requires_approval = True
+                requires_approval = False # Changed from True to skip confirmation by default
             
             # Case A: No Plan -> Create Plan
             if not current_plan_id:
@@ -175,7 +176,7 @@ class PipelineOrchestrator:
         file_results = []
         
         for i, item in enumerate(items):
-            print(f"[PIPELINE v3] Processing Item {i+1}/{total_items}: {item['path']} ({item['strategy']})")
+            print(f"!!! LOOP TRACE: Processing {i+1}/{total_items}: {item['path']}")
             
             # Update Job Progress (Current Item)
             self.supabase.table("job_run").update({
@@ -185,11 +186,15 @@ class PipelineOrchestrator:
             
             # Read Content
             full_path = os.path.join(root_path, item["path"])
+            print(f"!!! LOOP TRACE: Attempting to read: {full_path}")
             try:
+                if not os.path.exists(full_path):
+                    raise FileNotFoundError(f"File not found: {full_path}")
                 with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
             except Exception as e:
                 print(f"Error reading file {full_path}: {e}")
+                self.supabase.table("job_plan_item").update({"status": "failed"}).eq("item_id", item["item_id"]).execute()
                 continue
 
             # Execute based on Strategy
@@ -201,12 +206,26 @@ class PipelineOrchestrator:
             status = "completed" if res.success else "failed"
             self.supabase.table("job_plan_item").update({"status": status}).eq("item_id", item["item_id"]).execute()
 
-        # Persist Results
-        self._execute_stage(job_id, "persist_results", lambda: self._persist_results(job_id, file_results))
+            # --- v4.0 Deep Dive ---
+            # If item is a package or complex SQL and was successful, perform Deep Dive
+            try:
+                if res.success and self._should_perform_deep_dive(item):
+                    print(f"[PIPELINE v4] Performing Deep Dive for {item['path']}")
+                    self._perform_deep_dive(job_id, item, content, res)
+            except Exception as dd_e:
+                print(f"[PIPELINE v4] CRITICAL ERROR in Deep Dive for {item['path']}: {dd_e}")
+                traceback.print_exc()
+
+        # Complete Job
+        print(f"[PIPELINE v3] Finalizing result persistence...")
+        # self._execute_stage(job_id, "persist_results", lambda: self._persist_results(job_id, file_results))
+        self._persist_results(job_id, file_results)
         
         # Update Graph
         if settings.NEO4J_URI:
-             self._execute_stage(job_id, "update_graph", lambda: self._update_graph(job_id, file_results))
+             print(f"[PIPELINE v3] Syncing to Neo4j...")
+             # self._execute_stage(job_id, "update_graph", lambda: self._update_graph(job_id, file_results))
+             self._update_graph(job_id, file_results)
              
         # Complete Job
         self.supabase.table("job_run").update({
@@ -271,6 +290,124 @@ class PipelineOrchestrator:
             return "extract.python" # v3 profile (dotted)
         else:
             return "extract.strict" # Fallback (dotted)
+
+    def _should_perform_deep_dive(self, item: Dict) -> bool:
+        """Determines if the item qualifies for v4.0 Deep Dive"""
+        ft = item.get("file_type", "").upper()
+        strategy = item.get("strategy")
+        strategy_val = strategy.value if hasattr(strategy, 'value') else strategy
+        
+        # Packages always get deep dive. Complex SQL with PARSER_PLUS_LLM too.
+        if ft in ["DTSX", "DSX"]:
+            return True
+        if ft in ["SQL", "DDL"] and strategy_val == "PARSER_PLUS_LLM":
+            return True
+        return False
+
+    def _perform_deep_dive(self, job_id: str, item: Dict, content: str, extraction_res: ProcessingResult):
+        """
+        v4.0 Deep Dive: Extracts internal package components and column-level lineage.
+        """
+        try:
+            # 1. Prepare Input
+            # We pass the content and the 'macro' extraction results to give context to the LLM
+            macro_nodes = [n.model_dump() for n in extraction_res.data.get("nodes", [])] if extraction_res.data else []
+            
+            llm_input = {
+                "content": content[:settings.MAX_CONTENT_CHARS],
+                "file_path": item["path"],
+                "file_type": item["file_type"],
+                "macro_nodes": macro_nodes
+            }
+            
+            context = {"job_id": job_id, "file_path": item["path"]}
+            
+            # 2. Run Deep Dive Action
+            action_name = "extract.deep_dive"
+            print(f"[PIPELINE v4] Calling ActionRunner for {action_name}")
+            result = self.action_runner.run_action(action_name, llm_input, context)
+            
+            if not result.success:
+                print(f"[PIPELINE v4] Deep Dive failed for {item['path']}: {result.error_message}")
+                return
+
+            # 3. Process & Persist Deep Dive Results
+            # We expect a JSON that fits DeepDiveResult (Package, Components, Transformations, Lineage)
+            data = result.data
+            
+            # Fetch project_id
+            job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+            project_id = job_res.data.get("project_id")
+            
+            # Enrich data with IDs and dates
+            now = datetime.now().isoformat()
+            
+            # Package enrichment
+            pkg_data = data.get("package", {})
+            pkg_data["project_id"] = project_id
+            pkg_data["created_at"] = now
+            pkg_data["updated_at"] = now
+            if not pkg_data.get("package_id"): pkg_data["package_id"] = str(uuid.uuid4())
+            # Try to link to asset if it was created in macro extraction
+            if macro_nodes:
+                # Heuristic: the first node of type PACKAGE or FILE might be our parent asset
+                assets = [n for n in macro_nodes if n["node_type"] in ["PACKAGE", "FILE"]]
+                if assets:
+                    # Note: sync_extraction_result might have assigned a different UUID in DB
+                    # This link is best-effort unless we return the id_map from catalog
+                    pass 
+
+            package = Package(**pkg_data)
+            
+            # Components enrichment
+            components = []
+            comp_id_map = {} # LLM might use temporary IDs, we fix them
+            for c in data.get("components", []):
+                llm_cid = c.get("component_id", str(uuid.uuid4()))
+                real_cid = str(uuid.uuid4())
+                comp_id_map[llm_cid] = real_cid
+                
+                c["component_id"] = real_cid
+                c["package_id"] = package.package_id
+                c["created_at"] = now
+                components.append(PackageComponent(**c))
+                
+            # Transformations enrichment
+            transformations = []
+            for t in data.get("transformations", []):
+                t["project_id"] = project_id
+                t["created_at"] = now
+                if not t.get("ir_id"): t["ir_id"] = str(uuid.uuid4())
+                # Remap component ID
+                old_cid = t.get("source_component_id")
+                if old_cid in comp_id_map:
+                    t["source_component_id"] = comp_id_map[old_cid]
+                transformations.append(TransformationIR(**t))
+                
+            # Lineage enrichment
+            lineage = []
+            for l in data.get("lineage", []):
+                l["project_id"] = project_id
+                l["package_id"] = package.package_id
+                l["created_at"] = now
+                if not l.get("lineage_id"): l["lineage_id"] = str(uuid.uuid4())
+                # Remap IR ID if LLM linked them
+                # (This part is tricky if LLM isn't consistent, but let's assume it attempts)
+                lineage.append(ColumnLineage(**l))
+                
+            deep_res = DeepDiveResult(
+                package=package,
+                components=components,
+                transformations=transformations,
+                lineage=lineage
+            )
+            
+            self.catalog.sync_deep_dive_result(deep_res, project_id)
+            print(f"[PIPELINE v4] Deep Dive Persisted for {item['path']}")
+
+        except Exception as e:
+            print(f"[PIPELINE v4] Error in _perform_deep_dive for {item['path']}: {e}")
+            traceback.print_exc()
 
     # --- Reused Methods from v2 (Private) ---
     # Copied helper methods like _execute_stage, _ingest_artifact, _persist_results, etc.

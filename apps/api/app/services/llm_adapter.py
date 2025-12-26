@@ -107,40 +107,51 @@ class LLMAdapter:
         temperature: float = 0.1,
         max_tokens: int = 1800
     ) -> Dict[str, Any]:
-        """Llamada a OpenRouter (formato raw para ActionRunner)"""
-        try:
-            client = self._get_openrouter_client()
-            
-            completion = client.chat.completions.create(
-                extra_headers={
-                    "HTTP-Referer": "https://discoveria.app", 
-                    "X-Title": "DiscoverIA",
-                },
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            
-            content = completion.choices[0].message.content
-            usage = completion.usage
-            
-            return {
-                "success": True,
-                "content": content,
-                "tokens_in": usage.prompt_tokens if usage else 0,
-                "tokens_out": usage.completion_tokens if usage else 0,
-                "provider": "openrouter"
-            }
+        """Llamada a OpenRouter (con reintentos para 429)"""
+        max_retries = 3
+        retry_delay = 5 # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                client = self._get_openrouter_client()
                 
-        except Exception as e:
-            print(f"[LLM ADAPTER] OpenRouter Error: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "tokens_in": 0,
-                "tokens_out": 0
-            }
+                completion = client.chat.completions.create(
+                    extra_headers={
+                        "HTTP-Referer": "https://discoveria.app", 
+                        "X-Title": "DiscoverIA",
+                    },
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                
+                content = completion.choices[0].message.content
+                usage = completion.usage
+                
+                return {
+                    "success": True,
+                    "content": content,
+                    "tokens_in": usage.prompt_tokens if usage else 0,
+                    "tokens_out": usage.completion_tokens if usage else 0,
+                    "provider": "openrouter"
+                }
+                    
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str and attempt < max_retries - 1:
+                    print(f"[LLM ADAPTER] Rate limit (429) hit. Retrying in {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2 # Exponential backoff
+                    continue
+                    
+                print(f"[LLM ADAPTER] OpenRouter Error: {e}")
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "tokens_in": 0,
+                    "tokens_out": 0
+                }
 
 # Crear instancia global
 _llm_adapter = None

@@ -1,14 +1,15 @@
-# Nexus Discovery Platform (v3.1)
+# Nexus Discovery Platform (v4.0)
 
 ## Overview
 Nexus Discovery is a SaaS platform for automated reverse engineering of data code (SSIS, SQL, Python) using Generative AI. It extracts data lineage, creates documentation, and visualizes relationships in a Knowledge Graph.
 
-## 🚀 What's New in v3.1 (Plan-Driven Execution)
-- **Plan Review UI**: A new "Human-in-the-loop" step where users can review, approve, reorder, and categorize files before execution.
-- **Hybrid Parsing (SSIS/DataStage)**: Native XML parsing combined with LLM enrichment for accurate and cost-effective ETL extraction.
-- **Incremental Updates**: Reprocess solutions with "Full Clean" or "Incremental Update" modes using hash-based file skipping to save costs.
-- **Multi-provider Routing**: Dynamic switching between LLM providers (OpenRouter, Groq, etc.) and models (Gemini 2.0, Llama 3) based on action requirements.
-- **Optimized Dashboard**: Fast plan loading and consolidated actions (View Graph/Catalog) for better UX.
+## 🚀 What's New in v4.0 (Deep Understanding)
+- **Package Deep Dive**: Granular extraction of internal ETL logic (SSIS/DataStage), mapping tasks, components, and embedded SQL.
+- **Column-Lineage Backend**: Precise field-to-field tracking and transformation rule extraction.
+- **Silent Mode (Auto-Approval)**: Automated E2E processing without manual plan confirmation (`requires_approval: false`).
+- **LLM Resilience**: Native retry & exponential backoff system for 429 rate limit errors.
+- **Gemini 2.0 Integration**: Optimized routing to Gemini 2.0 Flash Lite for superior technical discovery.
+- **Tracing & Diagnostics**: Enhanced worker-level logging for loop integrity and file read validation.
 
 ## 🛠️ Utility Scripts
 Useful scripts for debugging and maintenance:

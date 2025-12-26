@@ -1,3 +1,29 @@
+# Release Notes - Nexus Discovery v4.0
+ 
+**Date:** December 25, 2025
+**Theme:** "Deep Understanding"
+ 
+## 🌟 v4.0 Highlights
+ 
+Nexus Discovery v4.0 introduces the **Deep Dive** engine, enabling granular extraction of ETL logic and column-level lineage.
+ 
+### 1. Package Deep Dive
+- **Granular Extraction**: The system now breaks down ETL packages (SSIS, DataStage) into internal components (DataFlowTasks, SQLTasks, Containers).
+- **Intermediate Representation (IR)**: Normalization of business logic into a platform-agnostic format to facilitate future migrations.
+ 
+### 2. Column-Level Lineage
+- **Field-to-Field Mapping**: Precision tracking of data movement from source systems to targets, including intermediate transformation rules.
+- **Deep Lineage Table**: New dedicated storage for high-resolution field mappings with confidence scores.
+ 
+### 3. Silent Mode & Automation
+- **Auto-Approval**: New `requires_approval: false` mode allows full end-to-end processing without manual plan confirmation.
+- **LLM Resilience**: Integrated automatic retries with exponential backoff for handling 429 rate limit errors from providers like OpenRouter.
+ 
+### 4. Optimized Model
+- **Gemini 2.0 Flash Lite**: Configured as the primary model for technical extraction, providing superior speed and cost-effectiveness.
+
+---
+
 # Release Notes - Nexus Discovery v3.1
 
 **Date:** December 23, 2025

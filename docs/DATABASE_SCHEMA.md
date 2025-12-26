@@ -13,6 +13,9 @@ erDiagram
     solutions ||--o{ asset : "contains"
     solutions ||--o{ edge_index : "contains"
     solutions ||--o{ evidence : "contains (logical)"
+    solutions ||--o{ package : "contains"
+    solutions ||--o{ transformation_ir : "contains"
+    solutions ||--o{ column_lineage : "contains"
 
     %% Execution
     job_run ||--o{ job_stage_run : "has steps"
@@ -30,6 +33,13 @@ erDiagram
     
     edge_index ||--o{ edge_evidence : "supported by"
     evidence ||--o{ edge_evidence : "supports"
+
+    %% v4.0 Deep Dive
+    package ||--o{ package_component : "has"
+    package_component ||--o{ package_component : "nesting (parent)"
+    package_component ||--o{ transformation_ir : "source of"
+    transformation_ir ||--o{ column_lineage : "contributes to"
+    package ||--o{ column_lineage : "contains"
 
     %% Definitions
     organizations {
@@ -269,8 +279,51 @@ Evidencia cruda que soporta un hallazgo o relación.
 - **snippet**: Fragmento de código relevante.
 - **locator**: JSON con ubicación precisa (líneas, xpath).
 
-#### `edge_evidence`
-Tabla de unión muchos-a-muchos que vincula una relación (`edge_index`) con las evidencias que la soportan (`evidence`).
+### 4. Deep Understanding (v4.0)
+
+#### `package`
+Cabecera de un paquete ETL o script complejo.
+- **package_id**: UUID (PK).
+- **project_id**: FK a `solutions(id)`.
+- **asset_id**: FK a `asset(asset_id)` (opcional, link al catálogo macro).
+- **name**: Nombre del paquete.
+- **type**: Tipo ('SSIS', 'DataStage', 'Python').
+- **source_system**: Sistema origen conceptual.
+- **target_system**: Sistema destino conceptual.
+- **business_intent**: Propósito de negocio.
+
+#### `package_component`
+Partes internas de un paquete (Tasks, Containers, Steps).
+- **component_id**: UUID (PK).
+- **package_id**: FK a `package`.
+- **parent_component_id**: FK recursiva para jerarquías.
+- **name**: Nombre del componente.
+- **type**: Tipo técnico ('DataFlow', 'ExecuteSQL', etc).
+- **logic_raw**: Fragmento de lógica original.
+- **source_mapping**: JSONB con origen de datos.
+- **target_mapping**: JSONB con destino de datos.
+
+#### `transformation_ir`
+Representación Intermedia de la lógica de transformación.
+- **ir_id**: UUID (PK).
+- **project_id**: FK a `solutions(id)`.
+- **source_component_id**: FK a `package_component`.
+- **operation**: Tipo de operación ('READ', 'WRITE', 'JOIN', 'AGGREGATE', etc).
+- **logic_summary**: Resumen funcional de la transformación.
+- **metadata**: JSONB con detalles técnicos (columnas, expresiones).
+
+#### `column_lineage`
+Trazabilidad de bajo nivel (campo a campo).
+- **lineage_id**: UUID (PK).
+- **project_id**: FK a `solutions(id)`.
+- **package_id**: FK a `package`.
+- **ir_id**: FK a `transformation_ir`.
+- **source_asset_id**: FK a `asset` (Columna origen).
+- **source_column**: Nombre de columna origen.
+- **target_asset_id**: FK a `asset` (Columna destino).
+- **target_column**: Nombre de columna destino.
+- **transformation_rule**: Regla aplicada.
+- **confidence**: Confianza del enlace.
 
 ---
 

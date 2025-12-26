@@ -1,15 +1,17 @@
 # Nexus Discovery - Roadmap & Known Issues
 
+## 🚀 Released (v4.0) - "Deep Understanding"
+- [x] **Package Deep Dive**: Granular extraction of SSIS/DataStage internal components.
+- [x] **Column-Level Lineage**: Back-end support for field-to-field mapping and transformation rules.
+- [x] **Silent Mode**: Automated end-to-end processing without manual approval.
+- [x] **LLM Resilience**: Automatic retries for rate-limited (429) provider calls.
+- [x] **Optmized Model**: Integration of Gemini 2.0 Flash Lite for technical extraction.
+
 ## 🚀 Released (v3.1) - "Plan & Control"
-- [x] **Planning Phase**: New orchestrator stage that scans files and generates an execution plan before spending tokens.
-- [x] **Human-in-the-Loop UI**: Dashboard allows reviewing, enabling/disabling files, and reordering processing.
-- [x] **Hybrid Parsing**: Native SSIS (.dtsx) XML parser combined with LLM for cost-effective lineage.
-- [x] **Incremental Reprocessing**: Option to "Update" existing solutions or "Full Clean" via the UI.
-- [x] **Truly Incremental**: Hash-based logic to skip unchanged files and save costs.
-- [x] **Multi-provider Routing**: Support for Gemini, Llama, and more via Groq/OpenRouter.
-- [x] **Policy Engine**: Auto-ignore `.git`, `node_modules`, and binary files.
-- [x] **Graph Filters**: Node type filtering in the Graph View.
-- [x] **Schema Extraction**: Specialized prompts for SQL/DDL parsing.
+- [x] **Planning Phase**: New orchestrator stage that scans files and generates execution plans.
+- [x] **Human-in-the-Loop UI**: Dashboard allows reviewing, enabling, and reordering.
+- [x] **Truly Incremental**: Hash-based logic to skip unchanged files.
+- [x] **Multi-provider Routing**: Support for Gemini/Llama via Groq/OpenRouter.
 
 ## Known Issues
 - **Neo4j Connectivity:** Transient "Unable to retrieve routing information" errors may occur with the free AuraDB tier. 
@@ -26,9 +28,10 @@
   - "Analyzing file 5/50..."
   - "Building Graph..."
 
-### 2. Advanced Lineage
-- **Column-Level Lineage:** Visualize dependencies between specific columns (e.g., `TableA.Col1 -> ETL -> TableB.Col2`).
-- **Impact Analysis:** "What-if" scenarios (e.g., "If I drop this column, what breaks?").
+### 2. Advanced Lineage & UI
+- [ ] **Column-Level Lineage UI**: Complete front-end visualization for field-level dependencies.
+- [ ] **Interactive Deep Dive**: Drill-down from packages to specific components in the UI.
+- [ ] **Impact Analysis**: "What-if" scenarios (e.g., "If I drop this column, what breaks?").
 
 ### 3. Reporting
 - **PDF Export:** Generate a printable PDF report of the solution documentation.

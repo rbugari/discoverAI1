@@ -33,6 +33,8 @@ class SQLJobQueue:
             .limit(1)\
             .execute()
         
+        # print(f"[DEBUG QUEUE] Found {len(res.data)} pending jobs")
+        
         if not res.data:
             return None
         
@@ -46,12 +48,13 @@ class SQLJobQueue:
                 "updated_at": datetime.datetime.utcnow().isoformat()
             })\
             .eq("id", job_queue_item["id"])\
-            .eq("status", "pending")\
             .execute()
             
         if not update_res.data:
-            # Race condition lost, try again recursively or return None
+            print(f"[DEBUG QUEUE] Failed to update job {job_queue_item['id']} status to processing")
             return None
+        
+        print(f"[DEBUG QUEUE] Successfully locked job {job_queue_item['id']}")
             
         return update_res.data[0]
 

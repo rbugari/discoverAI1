@@ -11,53 +11,43 @@ class SSISParser:
     @staticmethod
     def parse_structure(content: str) -> Dict[str, Any]:
         """
-        Returns a simplified JSON structure of the package:
-        {
-            "executables": [
-                {"name": "...", "type": "...", "description": "..."}
-            ],
-            "precedence_constraints": [
-                {"from": "...", "to": "..."}
-            ]
-        }
+        Returns a detailed JSON structure of the package for v4.0 Deep Dive.
         """
-        # Simple regex extraction for Executables (Tasks)
-        # Looking for <DTS:Executable ... DTS:ObjectName="Name" ...>
-        
         executables = []
         
-        # Regex to find Executable blocks (simplified)
-        # We look for DTS:ObjectName="..." and DTS:Description="..." inside DTS:Executable tags
-        # This is a heuristic parser.
+        # 1. Extract All Executables with more detail
+        # Heuristic: <DTS:Executable ... DTS:ObjectName="Name" ...>
+        # We look for ObjectName, Description and Type
+        exe_blocks = re.findall(r'<DTS:Executable.*?DTS:ExecutableType="([^"]+)".*?DTS:ObjectName="([^"]+)"(.*?)>', content, re.DOTALL)
         
-        # Find all ObjectNames
-        # Pattern: DTS:ObjectName="([^"]+)"
-        # But we need to make sure it's an Executable.
-        
-        # Let's try to extract blocks roughly.
-        # <DTS:Executable ...> ... </DTS:Executable>
-        
-        # For now, just extract names and types to give the LLM a hint.
-        
-        # Extract Executables
-        exe_pattern = r'DTS:ExecutableType="([^"]+)"[^>]*DTS:ObjectName="([^"]+)"'
-        matches = re.findall(exe_pattern, content)
-        
-        for m in matches:
-            exe_type = m[0]
-            exe_name = m[1]
+        for exe_type, exe_name, extra in exe_blocks:
+            if "SSIS.Package" in exe_type: continue
             
-            # Filter out common noise
-            if "SSIS.Package" in exe_type: 
-                continue
-                
-            executables.append({
+            comp = {
                 "name": exe_name,
                 "type": exe_type,
-                "is_container": "Sequence" in exe_type
-            })
+                "is_container": "Sequence" in exe_type or "For" in exe_type
+            }
+            
+            # 2. Heuristic extraction of SQL if it's a SQL Task
+            if "ExecuteSQLTask" in exe_type:
+                sql_match = re.search(r'SQLStatementSource="([^"]+)"', content) # Simplified, might be in a child node
+                if not sql_match:
+                    # Look for content between <DirectInput> tags
+                    sql_match = re.search(r'<DirectInput>(.*?)</DirectInput>', content, re.DOTALL)
+                
+                if sql_match:
+                    comp["sql_logic"] = sql_match.group(1).strip()[:1000] # Truncate
+
+            # 3. Heuristic for DataFlow components (very simplified)
+            if "Pipeline" in exe_type:
+                # Look for component names inside the same package block or context
+                components = re.findall(r'componentClassID="[^"]+".*?name="([^"]+)"', content)
+                comp["internal_components"] = list(set(components))[:20]
+
+            executables.append(comp)
             
         return {
             "summary": f"Found {len(executables)} tasks/containers.",
-            "tasks": executables[:50] # Limit to top 50 to avoid context overflow
+            "tasks": executables[:40] 
         }

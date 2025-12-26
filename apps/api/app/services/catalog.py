@@ -1,5 +1,6 @@
 from supabase import Client
 from ..models.extraction import ExtractionResult, ExtractedNode, ExtractedEdge, Evidence
+from ..models.deep_dive import DeepDiveResult, Package, PackageComponent, TransformationIR, ColumnLineage
 import uuid
 
 class CatalogService:
@@ -150,3 +151,52 @@ class CatalogService:
                     
         return node_id_map
 
+    def sync_deep_dive_result(self, result: DeepDiveResult, project_id: str):
+        """
+        Writes packages, components, transformations, and lineage to the SQL Catalog.
+        """
+        # 1. Package
+        pkg = result.package
+        pkg_data = pkg.model_dump()
+        # Ensure dates are strings or handled by JSON
+        pkg_data["created_at"] = pkg_data["created_at"].isoformat()
+        pkg_data["updated_at"] = pkg_data["updated_at"].isoformat()
+        if pkg_data.get("package_id"): pkg_data["package_id"] = str(pkg_data["package_id"])
+        if pkg_data.get("project_id"): pkg_data["project_id"] = str(pkg_data["project_id"])
+        if pkg_data.get("asset_id"): pkg_data["asset_id"] = str(pkg_data["asset_id"])
+
+        self.supabase.table("package").upsert(pkg_data).execute()
+
+        # 2. Components
+        comp_id_map = {} # local/input id to UUID if needed, but components should have UUIDs
+        for comp in result.components:
+            comp_data = comp.model_dump()
+            comp_data["created_at"] = comp_data["created_at"].isoformat()
+            if comp_data.get("component_id"): comp_data["component_id"] = str(comp_data["component_id"])
+            if comp_data.get("package_id"): comp_data["package_id"] = str(comp_data["package_id"])
+            if comp_data.get("parent_component_id"): comp_data["parent_component_id"] = str(comp_data["parent_component_id"])
+            
+            self.supabase.table("package_component").upsert(comp_data).execute()
+        
+        # 3. Transformation IR
+        for ir in result.transformations:
+            ir_data = ir.model_dump()
+            ir_data["created_at"] = ir_data["created_at"].isoformat()
+            if ir_data.get("ir_id"): ir_data["ir_id"] = str(ir_data["ir_id"])
+            if ir_data.get("project_id"): ir_data["project_id"] = str(ir_data["project_id"])
+            if ir_data.get("source_component_id"): ir_data["source_component_id"] = str(ir_data["source_component_id"])
+            
+            self.supabase.table("transformation_ir").upsert(ir_data).execute()
+
+        # 4. Column Lineage
+        for lin in result.lineage:
+            lin_data = lin.model_dump()
+            lin_data["created_at"] = lin_data["created_at"].isoformat()
+            if lin_data.get("lineage_id"): lin_data["lineage_id"] = str(lin_data["lineage_id"])
+            if lin_data.get("project_id"): lin_data["project_id"] = str(lin_data["project_id"])
+            if lin_data.get("package_id"): lin_data["package_id"] = str(lin_data["package_id"])
+            if lin_data.get("ir_id"): lin_data["ir_id"] = str(lin_data["ir_id"])
+            if lin_data.get("source_asset_id"): lin_data["source_asset_id"] = str(lin_data["source_asset_id"])
+            if lin_data.get("target_asset_id"): lin_data["target_asset_id"] = str(lin_data["target_asset_id"])
+            
+            self.supabase.table("column_lineage").upsert(lin_data).execute()

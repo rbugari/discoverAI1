@@ -23,6 +23,8 @@ import axios from 'axios';
 import dagre from 'dagre';
 import { ChatAssistant } from '@/components/ChatAssistant';
 import CatalogPage from './catalog/page';
+import PackagesView from './PackagesView';
+import LineageView from './LineageView';
 import { ModeToggle } from '@/components/mode-toggle';
 
 interface PageProps {
@@ -671,7 +673,11 @@ export default function SolutionDetailPage({ params }: PageProps) {
     const [solution, setSolution] = useState<any>(null);
     const [activeJob, setActiveJob] = useState<any>(null); // New state for active job
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'graph' | 'catalog'>(queryView === 'catalog' ? 'catalog' : 'graph');
+    const [viewMode, setViewMode] = useState<'graph' | 'catalog' | 'packages' | 'lineage'>(
+        queryView === 'catalog' ? 'catalog' :
+            queryView === 'packages' ? 'packages' :
+                queryView === 'lineage' ? 'lineage' : 'graph'
+    );
     const router = useRouter(); // For navigation
 
     const fetchSolution = useCallback(async () => {
@@ -821,6 +827,18 @@ export default function SolutionDetailPage({ params }: PageProps) {
                         >
                             <LayoutGrid size={16} /> Catalog
                         </button>
+                        <button
+                            onClick={() => setViewMode('packages')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'packages' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <Database size={16} /> Packages
+                        </button>
+                        <button
+                            onClick={() => setViewMode('lineage')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'lineage' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <ArrowRightLeft size={16} /> Lineage
+                        </button>
                     </div>
                 </div>
             </div>
@@ -830,9 +848,17 @@ export default function SolutionDetailPage({ params }: PageProps) {
                 <ReactFlowProvider>
                     <GraphContent id={id} solution={solution} />
                 </ReactFlowProvider>
-            ) : (
+            ) : viewMode === 'catalog' ? (
                 <div className="flex-1 overflow-hidden bg-background">
                     <CatalogPage params={{ id }} />
+                </div>
+            ) : viewMode === 'packages' ? (
+                <div className="flex-1 overflow-hidden">
+                    <PackagesView solutionId={id} />
+                </div>
+            ) : (
+                <div className="flex-1 overflow-hidden">
+                    <LineageView solutionId={id} />
                 </div>
             )}
         </div>

@@ -1,4 +1,4 @@
-# Nexus Discovery - Functional Specification (v3.1)
+# Nexus Discovery - Functional Specification (v4.0)
 
 ## 1. Executive Summary
 **Nexus Discovery** is an AI-powered Reverse Engineering & Data Lineage platform designed to accelerate the understanding, documentation, and migration of complex data ecosystems. 
@@ -16,7 +16,7 @@ By leveraging Generative AI (LLMs) and Graph Database technology, Nexus Discover
 *   **Migration Engineers:** To deconstruct legacy ETL pipelines (e.g., SSIS) and re-implement them in modern platforms (e.g., Databricks, dbt).
 *   **Data Stewards/Governance Officers:** To discover data flows and ensure compliance.
 
-## 4. Key Features (Release v3.1)
+## 4. Key Features (Release v4.0)
 
 ### 4.0. Plan-Driven Orchestration & Incremental Updates
 *   **Discovery Phase**: A light-speed scan identifies file types and strategies before deep analysis.
@@ -48,9 +48,12 @@ By leveraging Generative AI (LLMs) and Graph Database technology, Nexus Discover
     *   *"What is the transformation logic in the Sales_ETL script?"*
     *   *"List all tables modified by the Finance workflow."*
 
-### 4.5. Governance & Export
-*   **Project Isolation:** Secure workspaces ensure data from different projects (e.g., "Marketing Migration" vs "Finance Audit") never mixes.
-*   **CSV Export:** Full export capability for offline analysis or integration with other documentation tools.
+### 4.6. Deep Understanding (v4.0)
+*   **Package Deep Dive**: Granular extraction of internal ETL logic (.dtsx, .dsx), identifying steps, variables, and embedded SQL.
+*   **Column-Level Lineage**: Precise tracing of individual fields through transformations, including business rules.
+*   **Intermediate Representation (IR)**: Platform-agnostic mapping of logic to facilitate system modernization.
+*   **Silent Mode**: Automated end-to-end processing without manual approval.
+*   **LLM Resilience**: Integrated backoff system to handle provider rate limits (429).
 
 ## 5. Use Cases
 
@@ -71,7 +74,6 @@ By leveraging Generative AI (LLMs) and Graph Database technology, Nexus Discover
 2.  **Visual First:** Complex dependencies are abstracted into intuitive visual flows.
 3.  **Explainable:** Every edge and node in the graph is backed by AI explanation, removing ambiguity.
 
-## 7. Future Roadmap (Preview)
 *   **Enterprise Sync:** Integration with Microsoft Purview and Databricks Unity Catalog.
-*   **Column-Level Lineage:** Deep tracing of individual fields through transformations.
-*   **Compliance Reporting:** Automated generation of PDF audit reports.
+*   **Active Comparison:** Diffing schemas and lineage between different environments/projects.
+*   **Compliance Dashboard:** Automated generation of PDF audit reports for governance.
