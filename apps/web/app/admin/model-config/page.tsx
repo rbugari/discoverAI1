@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { 
-  Settings, Loader2, Save, RefreshCw, 
-  Shield, Server, Activity, CheckCircle2, AlertCircle
+import {
+  Settings, Loader2, Save, RefreshCw,
+  Shield, Server, Activity, CheckCircle2, AlertCircle,
+  BookOpen
 } from 'lucide-react';
 import Link from 'next/link';
+import HelpOverlay from '@/components/HelpOverlay';
 
 interface ConfigInfo {
   providers: string[];
@@ -23,7 +25,8 @@ export default function AdminConfigPage() {
   const [saving, setSaving] = useState(false);
   const [activeProvider, setActiveProvider] = useState('');
   const [activeRouting, setActiveRouting] = useState('');
-  const [statusMsg, setStatusMsg] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const api_url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -40,7 +43,7 @@ export default function AdminConfigPage() {
       setActiveRouting(res.data.active.routing);
     } catch (e) {
       console.error(e);
-      setStatusMsg({type: 'error', text: 'Failed to load configuration'});
+      setStatusMsg({ type: 'error', text: 'Failed to load configuration' });
     } finally {
       setLoading(false);
     }
@@ -54,11 +57,11 @@ export default function AdminConfigPage() {
         provider_path: activeProvider,
         routing_path: activeRouting
       });
-      setStatusMsg({type: 'success', text: 'Configuration updated successfully'});
+      setStatusMsg({ type: 'success', text: 'Configuration updated successfully' });
       fetchConfig();
     } catch (e: any) {
       console.error(e);
-      setStatusMsg({type: 'error', text: e.response?.data?.detail || 'Failed to update configuration'});
+      setStatusMsg({ type: 'error', text: e.response?.data?.detail || 'Failed to update configuration' });
     } finally {
       setSaving(false);
     }
@@ -85,15 +88,23 @@ export default function AdminConfigPage() {
               <p className="text-muted-foreground">Manage LLM providers and action routings (v3.0)</p>
             </div>
           </div>
-          <Link href="/dashboard" className="text-sm font-medium hover:underline text-muted-foreground">
-            Back to Dashboard
-          </Link>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="bg-primary/10 hover:bg-primary/20 p-2 px-3 rounded-lg text-primary transition-colors flex items-center gap-2 text-xs font-bold"
+            >
+              <BookOpen size={16} />
+              Guide
+            </button>
+            <Link href="/dashboard" className="text-sm font-medium hover:underline text-muted-foreground">
+              Back to Dashboard
+            </Link>
+          </div>
         </div>
 
         {statusMsg && (
-          <div className={`p-4 rounded-lg border flex items-center gap-3 ${
-            statusMsg.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
-          }`}>
+          <div className={`p-4 rounded-lg border flex items-center gap-3 ${statusMsg.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-600' : 'bg-red-500/10 border-red-500/20 text-red-600'
+            }`}>
             {statusMsg.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             <span className="text-sm font-medium">{statusMsg.text}</span>
           </div>
@@ -110,7 +121,7 @@ export default function AdminConfigPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">Provider</label>
-                <select 
+                <select
                   value={activeProvider}
                   onChange={(e) => setActiveProvider(e.target.value)}
                   className="w-full bg-muted/50 border border-border rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
@@ -123,7 +134,7 @@ export default function AdminConfigPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground">Routing Strategy</label>
-                <select 
+                <select
                   value={activeRouting}
                   onChange={(e) => setActiveRouting(e.target.value)}
                   className="w-full bg-muted/50 border border-border rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
@@ -134,7 +145,7 @@ export default function AdminConfigPage() {
                 </select>
               </div>
 
-              <button 
+              <button
                 onClick={handleSave}
                 disabled={saving}
                 className="w-full bg-primary text-primary-foreground font-semibold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
@@ -151,7 +162,7 @@ export default function AdminConfigPage() {
               <Activity className="text-primary" size={20} />
               <h2>System Inventory</h2>
             </div>
-            
+
             <div className="space-y-4">
               <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
                 <div className="flex items-center gap-3">
@@ -185,6 +196,13 @@ export default function AdminConfigPage() {
           </div>
         </div>
       </div>
+
+      <HelpOverlay
+        isOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        title="Model Routing Guide"
+        docPath="/docs/model_routing_help.md"
+      />
     </div>
   );
 }

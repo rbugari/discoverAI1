@@ -1,11 +1,11 @@
 import os
+import traceback
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from .tasks import analyze_solution_task
 from pydantic import BaseModel
-from .routers import planning
-from .services.config_manager import ConfigManager
+from .routers import planning, solutions, admin, governance
 
 load_dotenv()
 
@@ -21,6 +21,9 @@ app.add_middleware(
 )
 
 app.include_router(planning.router)
+app.include_router(solutions.router)
+app.include_router(admin.router)
+app.include_router(governance.router)
 
 class JobRequest(BaseModel):
     solution_id: str
@@ -194,13 +197,25 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
                 
                 if plan_ids:
                     # Cleanup Items -> Areas -> Plans
+                    # CRITICAL: Nullify plan_id in job_run first to avoid FK violation
+                    supabase.table("job_run").update({"plan_id": None}).in_("plan_id", plan_ids).execute()
+                    
                     supabase.table("job_plan_item").delete().in_("plan_id", plan_ids).execute()
                     supabase.table("job_plan_area").delete().in_("plan_id", plan_ids).execute()
                     supabase.table("job_plan").delete().in_("plan_id", plan_ids).execute()
 
-            # 2. Cleanup Catalog Data
-            # Note: edge_evidence usually cleared via FK cascade or manual if needed. 
-            # If chk fails, we might need a more selective delete.
+            # 2. Cleanup Catalog Data (Manual Cascade for Packages)
+            supabase.table("column_lineage").delete().eq("project_id", solution_id).execute()
+            supabase.table("transformation_ir").delete().eq("project_id", solution_id).execute()
+            
+            # Fetch package_ids to delete components
+            pkg_res = supabase.table("package").select("package_id").eq("project_id", solution_id).execute()
+            pkg_ids = [p["package_id"] for p in pkg_res.data]
+            if pkg_ids:
+                supabase.table("package_component").delete().in_("package_id", pkg_ids).execute()
+            
+            supabase.table("package").delete().eq("project_id", solution_id).execute()
+            
             supabase.table("edge_index").delete().eq("project_id", solution_id).execute()
             supabase.table("asset").delete().eq("project_id", solution_id).execute()
             supabase.table("evidence").delete().eq("project_id", solution_id).execute()
@@ -270,106 +285,7 @@ async def find_paths(req: PathRequest):
     graph = get_graph_service()
     return graph.find_paths(req.from_id, req.to_id, req.max_hops)
 
-@app.post("/admin/cleanup")
-async def admin_cleanup_database():
-    """
-    NUCLEAR OPTION: Truncates all data tables to reset the system.
-    Requires Service Role Key.
-    """
-    from supabase import create_client
-    from .config import settings
-    
-    # Force Service Role Key
-    if not settings.SUPABASE_SERVICE_ROLE_KEY:
-        raise HTTPException(status_code=500, detail="Service Role Key not configured. Cannot perform admin cleanup.")
-        
-    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_ROLE_KEY)
-    
-    try:
-        print("☢️ STARTING NUCLEAR CLEANUP ☢️")
-        
-        # Order matters for Foreign Keys if cascade is not set
-        tables_to_clean = [
-            "edge_evidence",
-            "edge_index",
-            "job_stage_run",
-            "job_queue",
-            "job_run",
-            "asset_version",
-            "asset",
-            "evidence",
-            "solutions"
-        ]
-        
-        results = {}
-        for table in tables_to_clean:
-            # delete().neq("id", "00000...") is a hack to delete all rows since supabase-py delete() requires a filter
-            # or use rpc if available.
-            # Using neq("id", "00000000-0000-0000-0000-000000000000") assuming UUID PKs
-            
-            # Better: use a dummy condition that is always true or ID is not null
-            # Checking table PK name might be needed but assuming standard ID or UUID logic
-            
-            print(f"Cleaning {table}...")
-            # Using a filter that matches everything usually works like gte created_at 1900...
-            # Or if table has 'id' column:
-            try:
-                if table == "solutions":
-                    res = supabase.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
-                elif table == "edge_evidence":
-                     # composite key, trickier. 
-                     # If we can't delete easily via client, we might need an RPC.
-                     # But let's try assuming we can delete by some column.
-                     # edge_evidence has edge_id.
-                     res = supabase.table(table).delete().neq("edge_id", "00000000-0000-0000-0000-000000000000").execute()
-                elif table == "job_queue":
-                     res = supabase.table(table).delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
-                elif "id" in ["job_run", "asset", "evidence", "job_stage_run", "edge_index", "asset_version"]:
-                     # These usually have specific PKs
-                     pk_map = {
-                         "job_run": "job_id",
-                         "asset": "asset_id",
-                         "evidence": "evidence_id",
-                         "edge_index": "edge_id",
-                         "asset_version": "asset_version_id",
-                         "job_stage_run": "id"
-                     }
-                     pk = pk_map.get(table, "id")
-                     res = supabase.table(table).delete().neq(pk, "00000000-0000-0000-0000-000000000000").execute()
-                else:
-                     res = {"data": "Skipped/Unknown PK"}
-                     
-                results[table] = len(res.data) if res.data else 0
-            except Exception as table_e:
-                print(f"Error cleaning {table}: {table_e}")
-                results[table] = f"Error: {str(table_e)}"
-
-        return {"status": "cleaned", "details": results}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/admin/model-config")
-async def get_model_config():
-    """Returns available and active model configurations."""
-    config_dir = os.path.join(os.path.dirname(__file__), "..", "config")
-    manager = ConfigManager(config_dir)
-    return manager.list_available_configs()
-
-class ActivateConfigRequest(BaseModel):
-    provider_path: str
-    routing_path: str
-
-@app.post("/admin/model-config/activate")
-async def activate_model_config(req: ActivateConfigRequest):
-    """Activates a specific model configuration."""
-    config_dir = os.path.join(os.path.dirname(__file__), "..", "config")
-    manager = ConfigManager(config_dir)
-    try:
-        manager.activate_config(req.provider_path, req.routing_path)
-        return {"status": "success", "message": f"Activated {req.routing_path}"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+# Admin endpoints moved to routers/admin.py
 
 @app.get("/solutions/{solution_id}/stats")
 async def get_solution_stats(solution_id: str):

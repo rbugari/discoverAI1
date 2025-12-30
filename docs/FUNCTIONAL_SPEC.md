@@ -52,28 +52,51 @@ By leveraging Generative AI (LLMs) and Graph Database technology, Nexus Discover
 *   **Package Deep Dive**: Granular extraction of internal ETL logic (.dtsx, .dsx), identifying steps, variables, and embedded SQL.
 *   **Column-Level Lineage**: Precise tracing of individual fields through transformations, including business rules.
 *   **Intermediate Representation (IR)**: Platform-agnostic mapping of logic to facilitate system modernization.
-*   **Silent Mode**: Automated end-to-end processing without manual approval.
+
+### 4.7. Hierarchical Prompting (v4.0 Sprint 2)
+*   **Layered Knowledge Fusion**: Final instructions are built by merging 4 distinct layers:
+    *   **Base**: Fundamental technical logic.
+    *   **Domain**: Technology expertise (SSIS, DataStage, etc.).
+    *   **Org**: Corporate standards and quality rules.
+    *   **Solution**: Project-specific context and local normalizations.
+*   **Prompt Matrix UI**: An administrative dashboard for managing these layers at scale or per-project.
+
+### 4.8. Governance Hub & Exports (v4.0 Sprint 3)
+*   **Enterprise Bridge**: Bridges the gap between technical discovery and enterprise governance.
+*   **Manual Export Gateways**:
+    *   **Purview**: CSV bulk upload format.
+    *   **Unity Catalog**: Lineage and Asset CSV mapping.
+    *   **dbt**: Automated `sources.yml` generation for source documentation.
+
+### 4.9. Resilience & integrated Help
 *   **LLM Resilience**: Integrated backoff system to handle provider rate limits (429).
+*   **Integrated Documentation**: In-app "Guides" explaining complex configuration logic (V5.0 Phase 1).
 
 ## 5. Use Cases
 
 ### Case A: The "Black Box" Migration
 **Scenario:** A retailer needs to migrate 500 SSIS packages to Databricks. The original developers left years ago.
-**Solution:** The team uploads the SSIS ZIP to Nexus Discovery. Within minutes, they have a visual map of all data flows. They identify that only 50 tables are critical for the migration, prioritizing effort and identifying redundant pipelines immediately.
+**Solution:** The team uploads the SSIS ZIP to DiscoverAI. Within minutes, they have a visual map of all data flows. They use the **Governance Hub** to export a `sources.yml` and start their dbt project immediately.
 
-### Case B: Impact Analysis
+### Case B: Complex Normalization (Northwind)
+**Scenario:** A project has inconsistent database names across environment files (`LocalDB`, `PROD_DB`, `Legacy_DB`) resulting in fragmented linage.
+**Solution:** The user adds a **Solution Layer** prompt: *"Normalize all variations of DB names to 'Warehouse_Gold'."* The system re-analyzes and consolidates the lineage automatically.
+
+### Case C: Impact Analysis
 **Scenario:** A DBA needs to change the schema of the `DimCustomer` table but fears breaking downstream reports.
 **Solution:** Using the Graph View, the DBA selects `DimCustomer` and instantly sees 3 ETL scripts and 2 Reporting Views that depend on it. They can now plan the schema change with zero unexpected downtime.
 
-### Case C: New Hire Onboarding
+### Case D: New Hire Onboarding
 **Scenario:** A new Senior Engineer joins the team and asks, "How does our data warehouse get populated?"
-**Solution:** Instead of reading thousands of lines of code, they spend 15 minutes exploring the Nexus Discovery graph, using the "Chat" feature to ask high-level architectural questions.
+**Solution:** Instead of reading thousands of lines of code, they spend 15 minutes exploring the DiscoverAI graph and using the **Integrated Guides** to understand the prompting logic.
 
 ## 6. Design Objectives
 1.  **Zero-Config:** No need to connect to live databases or configure connection strings. The analysis is static and safe, running purely on source code.
 2.  **Visual First:** Complex dependencies are abstracted into intuitive visual flows.
 3.  **Explainable:** Every edge and node in the graph is backed by AI explanation, removing ambiguity.
 
-*   **Enterprise Sync:** Integration with Microsoft Purview and Databricks Unity Catalog.
 *   **Active Comparison:** Diffing schemas and lineage between different environments/projects.
 *   **Compliance Dashboard:** Automated generation of PDF audit reports for governance.
+
+---
+© 2025 DiscoverAI | Advanced Data Discovery

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, RefreshCw, X, FileText, Database, Table, Download, ArrowRightLeft, LayoutGrid, Network, Filter, Settings, Map, ArrowDown, ArrowRight, Focus, Minimize2, CircleDot } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, X, FileText, Database, Table, Download, ArrowRightLeft, LayoutGrid, Network, Filter, Settings, Map, ArrowDown, ArrowRight, Focus, Minimize2, CircleDot, Share2 } from 'lucide-react';
 import ReactFlow, {
     Node,
     Edge,
@@ -25,6 +25,7 @@ import { ChatAssistant } from '@/components/ChatAssistant';
 import CatalogPage from './catalog/page';
 import PackagesView from './PackagesView';
 import LineageView from './LineageView';
+import GovernanceView from './GovernanceView';
 import { ModeToggle } from '@/components/mode-toggle';
 
 interface PageProps {
@@ -673,12 +674,23 @@ export default function SolutionDetailPage({ params }: PageProps) {
     const [solution, setSolution] = useState<any>(null);
     const [activeJob, setActiveJob] = useState<any>(null); // New state for active job
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'graph' | 'catalog' | 'packages' | 'lineage'>(
+    const [viewMode, setViewMode] = useState<'graph' | 'catalog' | 'packages' | 'lineage' | 'governance'>(
         queryView === 'catalog' ? 'catalog' :
             queryView === 'packages' ? 'packages' :
-                queryView === 'lineage' ? 'lineage' : 'graph'
+                queryView === 'lineage' ? 'lineage' :
+                    queryView === 'governance' ? 'governance' : 'graph'
     );
     const router = useRouter(); // For navigation
+
+    const handleExportPDF = async () => {
+        try {
+            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${id}/report/pdf`;
+            window.open(apiUrl, '_blank');
+        } catch (error) {
+            console.error('Failed to export PDF:', error);
+            alert('Error generating PDF report');
+        }
+    };
 
     const fetchSolution = useCallback(async () => {
         // 1. Fetch Solution Details
@@ -811,8 +823,13 @@ export default function SolutionDetailPage({ params }: PageProps) {
                     </div>
                 </div>
 
-                {/* View Switcher */}
                 <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExportPDF}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:opacity-90 transition-all mr-2"
+                    >
+                        <FileText size={16} /> Export PDF
+                    </button>
                     <ModeToggle />
                     <div className="flex bg-muted p-1 rounded-md">
                         <button
@@ -839,6 +856,12 @@ export default function SolutionDetailPage({ params }: PageProps) {
                         >
                             <ArrowRightLeft size={16} /> Lineage
                         </button>
+                        <button
+                            onClick={() => setViewMode('governance')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'governance' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <Share2 size={16} /> Integrations
+                        </button>
                     </div>
                 </div>
             </div>
@@ -856,9 +879,13 @@ export default function SolutionDetailPage({ params }: PageProps) {
                 <div className="flex-1 overflow-hidden">
                     <PackagesView solutionId={id} />
                 </div>
-            ) : (
+            ) : viewMode === 'lineage' ? (
                 <div className="flex-1 overflow-hidden">
                     <LineageView solutionId={id} />
+                </div>
+            ) : (
+                <div className="flex-1 overflow-auto bg-muted/10">
+                    <GovernanceView solutionId={id} />
                 </div>
             )}
         </div>

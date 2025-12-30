@@ -23,6 +23,7 @@ from ..services.storage import StorageService
 from ..services.catalog import CatalogService
 from ..services.planner import PlannerService
 from ..services.extractors.ssis import SSISParser
+from ..services.extractors.datastage import DataStageParser
 from ..config import settings
 
 @dataclass
@@ -199,27 +200,31 @@ class PipelineOrchestrator:
 
             # Execute based on Strategy
             res = self._process_item_v3(job_id, item, content, full_path)
-            file_results.append(res)
             self._update_metrics(res)
             
-            # Update Item Status
-            status = "completed" if res.success else "failed"
-            self.supabase.table("job_plan_item").update({"status": status}).eq("item_id", item["item_id"]).execute()
+            # --- v3/v4 PERSISTENCE & DEEP DIVE ---
+            node_id_map = {}
+            if res.success:
+                # 1. Persist Macro Results immediately to get UUIDs
+                persist_res = self._persist_single_result(job_id, res)
+                node_id_map = persist_res.get("node_id_map", {})
+                
+                # Update Item Status
+                self.supabase.table("job_plan_item").update({"status": "completed"}).eq("item_id", item["item_id"]).execute()
+                
+                # 2. Deep Dive (if applicable)
+                if self._should_perform_deep_dive(item):
+                    try:
+                        print(f"[PIPELINE v4] Performing Deep Dive for {item['path']}")
+                        self._perform_deep_dive(job_id, item, content, res, node_id_map)
+                    except Exception as dd_e:
+                        print(f"[PIPELINE v4] CRITICAL ERROR in Deep Dive for {item['path']}: {dd_e}")
+                        traceback.print_exc()
+            else:
+                self.supabase.table("job_plan_item").update({"status": "failed"}).eq("item_id", item["item_id"]).execute()
 
-            # --- v4.0 Deep Dive ---
-            # If item is a package or complex SQL and was successful, perform Deep Dive
-            try:
-                if res.success and self._should_perform_deep_dive(item):
-                    print(f"[PIPELINE v4] Performing Deep Dive for {item['path']}")
-                    self._perform_deep_dive(job_id, item, content, res)
-            except Exception as dd_e:
-                print(f"[PIPELINE v4] CRITICAL ERROR in Deep Dive for {item['path']}: {dd_e}")
-                traceback.print_exc()
-
-        # Complete Job
-        print(f"[PIPELINE v3] Finalizing result persistence...")
-        # self._execute_stage(job_id, "persist_results", lambda: self._persist_results(job_id, file_results))
-        self._persist_results(job_id, file_results)
+        # Finalize
+        print(f"[PIPELINE v3] Finalizing execution...")
         
         # Update Graph
         if settings.NEO4J_URI:
@@ -304,14 +309,33 @@ class PipelineOrchestrator:
             return True
         return False
 
-    def _perform_deep_dive(self, job_id: str, item: Dict, content: str, extraction_res: ProcessingResult):
+    def _perform_deep_dive(self, job_id: str, item: Dict, content: str, extraction_res: ProcessingResult, node_id_map: Dict[str, str] = None):
         """
         v4.0 Deep Dive: Extracts internal package components and column-level lineage.
         """
+        node_id_map = node_id_map or {}
         try:
-            # 1. Prepare Input
+            # 1. Prepare Input & Resolve Asset Names
             # We pass the content and the 'macro' extraction results to give context to the LLM
-            macro_nodes = [n.model_dump() for n in extraction_res.data.get("nodes", [])] if extraction_res.data else []
+            macro_nodes = []
+            name_map = {} # name -> UUID
+            id_name_map = {} # node_id -> UUID
+            
+            if extraction_res.data and "nodes" in extraction_res.data:
+                for n in extraction_res.data["nodes"]:
+                    node_dict = {}
+                    if hasattr(n, "model_dump"):
+                        node_dict = n.model_dump()
+                    elif isinstance(n, dict):
+                        node_dict = n
+                    
+                    macro_nodes.append(node_dict)
+                    
+                    # Populate resolution maps
+                    u_id = node_id_map.get(node_dict.get("node_id"))
+                    if u_id:
+                        if node_dict.get("name"): name_map[node_dict["name"]] = u_id
+                        if node_dict.get("node_id"): id_name_map[node_dict["node_id"]] = u_id
             
             llm_input = {
                 "content": content[:settings.MAX_CONTENT_CHARS],
@@ -333,7 +357,7 @@ class PipelineOrchestrator:
 
             # 3. Process & Persist Deep Dive Results
             # We expect a JSON that fits DeepDiveResult (Package, Components, Transformations, Lineage)
-            data = result.data
+            data = result.data or {}
             
             # Fetch project_id
             job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
@@ -364,7 +388,14 @@ class PipelineOrchestrator:
             comp_id_map = {} # LLM might use temporary IDs, we fix them
             for c in data.get("components", []):
                 llm_cid = c.get("component_id", str(uuid.uuid4()))
-                real_cid = str(uuid.uuid4())
+                
+                # Sanitize component_id: must be valid UUID
+                try:
+                    uuid.UUID(str(llm_cid))
+                    real_cid = str(llm_cid)
+                except ValueError:
+                    real_cid = str(uuid.uuid4())
+                
                 comp_id_map[llm_cid] = real_cid
                 
                 c["component_id"] = real_cid
@@ -377,11 +408,26 @@ class PipelineOrchestrator:
             for t in data.get("transformations", []):
                 t["project_id"] = project_id
                 t["created_at"] = now
-                if not t.get("ir_id"): t["ir_id"] = str(uuid.uuid4())
+                
+                # Sanitize ir_id
+                ir_id = t.get("ir_id")
+                try:
+                    if ir_id: uuid.UUID(str(ir_id))
+                    else: t["ir_id"] = str(uuid.uuid4())
+                except ValueError:
+                    t["ir_id"] = str(uuid.uuid4())
+                
                 # Remap component ID
                 old_cid = t.get("source_component_id")
                 if old_cid in comp_id_map:
                     t["source_component_id"] = comp_id_map[old_cid]
+                else:
+                    # Ensure it's a UUID or None
+                    try:
+                        if old_cid: uuid.UUID(str(old_cid))
+                    except ValueError:
+                        t["source_component_id"] = None
+                        
                 transformations.append(TransformationIR(**t))
                 
             # Lineage enrichment
@@ -391,8 +437,29 @@ class PipelineOrchestrator:
                 l["package_id"] = package.package_id
                 l["created_at"] = now
                 if not l.get("lineage_id"): l["lineage_id"] = str(uuid.uuid4())
-                # Remap IR ID if LLM linked them
-                # (This part is tricky if LLM isn't consistent, but let's assume it attempts)
+                
+                # --- ASSET RESOLUTION ---
+                # Resolve names into UUIDs from the macro extraction
+                src_search = l.get("source_asset_id")
+                tgt_search = l.get("target_asset_id")
+                
+                # Resolution logic: Check ID map then Name map
+                resolved_src = id_name_map.get(src_search) or name_map.get(src_search)
+                resolved_tgt = id_name_map.get(tgt_search) or name_map.get(tgt_search)
+                
+                # Update with UUIDs or set to None (Pydantic expects UUID or None)
+                try:
+                    if resolved_src: uuid.UUID(str(resolved_src))
+                    l["source_asset_id"] = resolved_src
+                except ValueError:
+                    l["source_asset_id"] = None
+                    
+                try:
+                    if resolved_tgt: uuid.UUID(str(resolved_tgt))
+                    l["target_asset_id"] = resolved_tgt
+                except ValueError:
+                    l["target_asset_id"] = None
+                
                 lineage.append(ColumnLineage(**l))
                 
             deep_res = DeepDiveResult(
@@ -449,14 +516,24 @@ class PipelineOrchestrator:
         # Same as v2 but accepts action_name
         
         # Enhanced Logic for SSIS/Packages (Deep Inspection)
-        if action_name == "extract.lineage.package" and (file_path.lower().endswith(".dtsx") or file_path.lower().endswith(".xml")):
+        is_ssis = file_path.lower().endswith(".dtsx") or file_path.lower().endswith(".xml")
+        is_dsx = file_path.lower().endswith(".dsx")
+
+        if is_ssis:
             try:
                 print(f"[PIPELINE v3] Running Deep Package Inspection (SSIS Parser) for {file_path}")
                 structure = SSISParser.parse_structure(content)
-                # Append structure to content to guide LLM
                 content = f"XML STRUCTURE SUMMARY:\n{json.dumps(structure, indent=2)}\n\nRAW CONTENT:\n{content}"
             except Exception as e:
                 print(f"[PIPELINE] SSIS Parser failed for {file_path}: {e}")
+        
+        elif is_dsx:
+            try:
+                print(f"[PIPELINE v4] Running DataStage Structural Parser for {file_path}")
+                structure = DataStageParser.parse_structure(content)
+                content = f"DATASTAGE STRUCTURE SUMMARY:\n{json.dumps(structure, indent=2)}\n\nRAW CONTENT:\n{content}"
+            except Exception as e:
+                print(f"[PIPELINE] DataStage Parser failed for {file_path}: {e}")
 
         # Strategy Selection
         llm_input = {"content": content[:settings.MAX_CONTENT_CHARS], "extension": Path(file_path).suffix}
@@ -485,59 +562,54 @@ class PipelineOrchestrator:
              self.logger.log_file_error(log_id, "llm_error", result.error_message)
         return result
 
-    def _persist_results(self, job_id: str, file_results: List[ProcessingResult]):
-        count = 0
+    def _persist_single_result(self, job_id: str, res: ProcessingResult) -> Dict[str, Any]:
+        """Persiste el resultado de un solo archivo y retorna el mapa de IDs"""
         try:
             job_data = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
             project_id = job_data.data.get("project_id")
             
-            for res in file_results:
-                if res.success and res.data:
-                    # Convert raw dict to ExtractionResult object
-                    try:
-                        # Ensure 'nodes' and 'edges' exist
-                        if "nodes" not in res.data: res.data["nodes"] = []
-                        if "edges" not in res.data: res.data["edges"] = []
-                        if "evidences" not in res.data: res.data["evidences"] = []
-                        
-                        # Pre-process data to handle missing fields leniently
-                        import uuid
-                        
-                        # Fix Nodes
-                        for node in res.data.get("nodes", []):
-                            if "name" not in node and "node_id" in node:
-                                node["name"] = node["node_id"].split('.')[-1]
-                            if "system" not in node:
-                                node["system"] = "unknown"
-                        
-                        # Fix Edges
-                        for edge in res.data.get("edges", []):
-                            if "edge_id" not in edge:
-                                edge["edge_id"] = str(uuid.uuid4())
-                            if "rationale" not in edge:
-                                edge["rationale"] = "Extracted by LLM"
-                            if "confidence" not in edge:
-                                edge["confidence"] = 1.0
-                        
-                        # Add meta info
-                        res.data["meta"] = {
-                            "source_file": res.file_path,
-                            "extractor_id": res.model_used or res.strategy_used
-                        }
-                        
-                        # Use Pydantic models for validation/conversion
-                        extraction_result = ExtractionResult(**res.data)
-                        
-                        # Sync to Catalog
-                        self.catalog.sync_extraction_result(extraction_result, project_id, artifact_id=job_id)
-                        count += 1
-                    except Exception as parse_e:
-                        print(f"[PIPELINE] Error converting/persisting result for {res.file_path}: {parse_e}")
+            if not res.data:
+                return {"node_id_map": {}}
+
+            # Ensure 'nodes' and 'edges' exist
+            if "nodes" not in res.data: res.data["nodes"] = []
+            if "edges" not in res.data: res.data["edges"] = []
+            if "evidences" not in res.data: res.data["evidences"] = []
+            
+            # Fix Nodes & Edges names/ids
+            for node in res.data.get("nodes", []):
+                if "name" not in node and "node_id" in node:
+                    node["name"] = node["node_id"].split('.')[-1]
+                if "system" not in node: node["system"] = "unknown"
+            
+            for edge in res.data.get("edges", []):
+                if "edge_id" not in edge: edge["edge_id"] = str(uuid.uuid4())
+                if "rationale" not in edge: edge["rationale"] = "Extracted by LLM"
+                if "confidence" not in edge: edge["confidence"] = 1.0
+            
+            # Add meta info
+            res.data["meta"] = {
+                "source_file": res.file_path,
+                "extractor_id": res.model_used or res.strategy_used
+            }
+            
+            # Use Pydantic models for validation/conversion
+            extraction_result = ExtractionResult(**res.data)
+            
+            # Sync to Catalog
+            node_id_map = self.catalog.sync_extraction_result(extraction_result, project_id, artifact_id=job_id)
+            return {"node_id_map": node_id_map}
                         
         except Exception as e:
-            print(f"Persist error: {e}")
+            print(f"[PIPELINE] Persist error for {res.file_path}: {e}")
             traceback.print_exc()
-        return {"persisted_count": count}
+            return {"node_id_map": {}}
+
+    def _persist_results(self, job_id: str, file_results: List[ProcessingResult]):
+        """Legacy compatibility or bulk persistence handler"""
+        # Since we now persist per-item, this might be redundant but 
+        # let's keep it if we need to sync graphs or something else at high level.
+        pass
 
     def _update_job_progress(self, job_id: str, stage: str):
         try:

@@ -1,5 +1,5 @@
 import json
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage
 from langchain_core.output_parsers import JsonOutputParser
@@ -20,7 +20,19 @@ class LLMService:
             model_name=settings.OPENROUTER_MODEL,
             temperature=0
         )
+        # For embeddings, we usually need a direct OpenAI key or a provider that supports it
+        self.embeddings = OpenAIEmbeddings(
+            openai_api_key=settings.OPENAI_API_KEY,
+            model="text-embedding-3-small"
+        )
         self.parser = JsonOutputParser(pydantic_object=ExtractionResult)
+        
+    def get_embeddings(self, text: str) -> List[float]:
+        try:
+            return self.embeddings.embed_query(text)
+        except Exception as e:
+            print(f"Embedding generation failed: {e}")
+            return []
         
         # Load prompts from external files
         self.prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")

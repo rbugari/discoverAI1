@@ -25,12 +25,19 @@ class StorageService:
         local_zip_path = os.path.join(settings.UPLOAD_DIR, os.path.basename(storage_path))
         extract_dir = os.path.join(settings.UPLOAD_DIR, os.path.splitext(os.path.basename(storage_path))[0])
         
-        # Local File Support for Testing
+        # Local File/Directory Support for Testing
         if storage_path.startswith("local://") or os.path.isabs(storage_path):
             source_path = storage_path.replace("local://", "")
-            print(f"Using local file: {source_path}")
+            print(f"[STORAGE] Using local source: {source_path}")
             if not os.path.exists(source_path):
-                 raise Exception(f"Local file not found: {source_path}")
+                 raise Exception(f"Local path not found: {source_path}")
+            
+            # If it's already a directory, just return it
+            if os.path.isdir(source_path):
+                print(f"[STORAGE] Path is a directory, using as is: {source_path}")
+                return source_path
+                
+            # If it's a file, copy to temp and treat as ZIP
             shutil.copy(source_path, local_zip_path)
         else:
             print(f"Downloading {storage_path} to {local_zip_path}...")

@@ -8,7 +8,6 @@ Este documento describe el esquema actual de la base de datos de **Nexus Discove
 erDiagram
     %% Core SaaS
     organizations ||--o{ solutions : "has"
-    organizations ||--o{ api_vault : "owns"
     solutions ||--o{ job_run : "executes"
     solutions ||--o{ asset : "contains"
     solutions ||--o{ edge_index : "contains"
@@ -16,6 +15,7 @@ erDiagram
     solutions ||--o{ package : "contains"
     solutions ||--o{ transformation_ir : "contains"
     solutions ||--o{ column_lineage : "contains"
+    job_run ||--o{ file_processing_log : "logs analysis detail"
 
     %% Execution
     job_run ||--o{ job_stage_run : "has steps"
@@ -34,12 +34,13 @@ erDiagram
     edge_index ||--o{ edge_evidence : "supported by"
     evidence ||--o{ edge_evidence : "supports"
 
-    %% v4.0 Deep Dive
-    package ||--o{ package_component : "has"
-    package_component ||--o{ package_component : "nesting (parent)"
-    package_component ||--o{ transformation_ir : "source of"
-    transformation_ir ||--o{ column_lineage : "contributes to"
     package ||--o{ column_lineage : "contains"
+    
+    %% v4.0 Hierarchical Prompting
+    organizations ||--o{ prompt_layer : "has standards"
+    solutions ||--o{ prompt_layer : "has solution rules"
+    solutions ||--o{ project_action_config : "defines overrides"
+    prompt_layer ||--o{ project_action_config : "used as override"
 
     %% Definitions
     organizations {
@@ -58,14 +59,6 @@ erDiagram
         jsonb config
         timestamp created_at
         timestamp updated_at
-    }
-
-    api_vault {
-        uuid id PK
-        uuid org_id FK
-        text service_name
-        text encrypted_value
-        timestamp created_at
     }
 
     job_run {
@@ -172,6 +165,21 @@ erDiagram
         uuid edge_id PK,FK
         uuid evidence_id PK,FK
     }
+
+    prompt_layer {
+        uuid id PK
+        text name
+        text layer_type "BASE|DOMAIN|ORG|SOLUTION"
+        text content
+        uuid project_id FK "Optional (Solution Layer)"
+    }
+
+    project_action_config {
+        uuid id PK
+        uuid project_id FK
+        text action_name
+        uuid solution_layer_id FK
+    }
 ```
 
 ## Detalles de Tablas
@@ -192,13 +200,8 @@ Representa un proyecto o "Solución" que se va a analizar.
 - **storage_path**: Ruta al archivo ZIP en Supabase Storage.
 - **status**: Estado general ('DRAFT', 'QUEUED', 'PROCESSING', 'READY', 'ERROR').
 - **config**: JSON con configuración extra (ej. patrones de ignorar).
-
-#### `api_vault`
-Almacén seguro para claves de API de terceros.
-- **id**: UUID (PK)
-- **org_id**: FK a `organizations`.
-- **service_name**: Identificador del servicio ('OPENROUTER', etc).
-- **encrypted_value**: Valor encriptado de la clave.
+- **created_at**: Timestamp de creación.
+- **updated_at**: Timestamp de última actualización.
 
 ---
 
@@ -238,6 +241,17 @@ Desglose de la ejecución en etapas (ej. "ingest", "extract", "graph").
 - **job_id**: FK a `job_run`.
 - **stage_name**: Nombre de la etapa.
 - **metrics**: JSON con métricas de la etapa (ej. número de archivos procesados).
+
+#### `file_processing_log`
+Auditoría detallada del procesamiento de cada archivo individual.
+- **id**: UUID (PK)
+- **job_id**: FK a `job_run`.
+- **file_path**: Ruta del archivo procesado.
+- **action_name**: Acción ejecutada (ej. `extract_strict`).
+- **model_used**: Modelo de IA que procesó el archivo.
+- **status**: Resultado (`success`, `failed`).
+- **input_tokens/output_tokens**: Consumo de tokens.
+- **cost_estimate_usd**: Costo estimado de la operación.
 
 #### `job_queue`
 Cola simple implementada en SQL para distribuir trabajo a los workers.
@@ -324,6 +338,25 @@ Trazabilidad de bajo nivel (campo a campo).
 - **target_column**: Nombre de columna destino.
 - **transformation_rule**: Regla aplicada.
 - **confidence**: Confianza del enlace.
+
+---
+
+### 5. Hierarchical Prompting & Governance (v4.0 Kernel)
+
+#### `prompt_layer`
+Contenedor de fragmentos de instrucciones para la IA.
+- **id**: UUID (PK).
+- **name**: Nombre descriptivo.
+- **layer_type**: Tipo de capa ('BASE', 'DOMAIN', 'ORG', 'SOLUTION').
+- **content**: Plantilla de prompt en Markdown.
+- **project_id**: FK a `solutions(id)`. Solo se usa para capas de tipo 'SOLUTION'.
+
+#### `project_action_config`
+Mapeo granular de capas de solución para proyectos específicos.
+- **id**: UUID (PK).
+- **project_id**: FK a `solutions(id)`.
+- **action_name**: Nombre de la acción (ej. `v3.extract.lineage.package`).
+- **solution_layer_id**: FK a `prompt_layer(id)`.
 
 ---
 

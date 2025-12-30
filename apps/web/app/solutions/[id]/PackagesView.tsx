@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Package, PackageComponent } from 'lucide-react';
+import { Package, Boxes } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
 export default function PackagesView({ solutionId }: { solutionId: string }) {
@@ -19,7 +19,7 @@ export default function PackagesView({ solutionId }: { solutionId: string }) {
         .from('package')
         .select('*')
         .eq('project_id', solutionId);
-      
+
       if (!error && data) {
         setPackages(data);
       }
@@ -37,7 +37,7 @@ export default function PackagesView({ solutionId }: { solutionId: string }) {
         .select('*')
         .eq('package_id', selectedPackage.package_id)
         .order('order_index');
-      
+
       if (!error && data) {
         setComponents(data);
       }
@@ -58,11 +58,10 @@ export default function PackagesView({ solutionId }: { solutionId: string }) {
           <button
             key={pkg.package_id}
             onClick={() => setSelectedPackage(pkg)}
-            className={`w-full text-left p-3 rounded-md border transition-all ${
-              selectedPackage?.package_id === pkg.package_id 
-                ? 'bg-primary/10 border-primary text-primary' 
-                : 'bg-card border-border hover:bg-accent'
-            }`}
+            className={`w-full text-left p-3 rounded-md border transition-all ${selectedPackage?.package_id === pkg.package_id
+              ? 'bg-primary/10 border-primary text-primary'
+              : 'bg-card border-border hover:bg-accent'
+              }`}
           >
             <div className="flex items-center gap-2 mb-1">
               <Package size={16} />
@@ -92,9 +91,9 @@ export default function PackagesView({ solutionId }: { solutionId: string }) {
             </div>
 
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-              <PackageComponent size={20} /> Internal Components
+              <Boxes size={20} /> Internal Components
             </h3>
-            
+
             {compLoading ? <Loader2 className="animate-spin mx-auto" /> : (
               <div className="space-y-4">
                 {components.length === 0 && <p className="text-muted-foreground italic">No components found for this package.</p>}
@@ -108,7 +107,7 @@ export default function PackagesView({ solutionId }: { solutionId: string }) {
                         <span className="font-semibold">{comp.name}</span>
                       </div>
                     </div>
-                    
+
                     <div className="p-4">
                       {/* Mapping Info if exists */}
                       {(comp.source_mapping?.length > 0 || comp.target_mapping?.length > 0) && (

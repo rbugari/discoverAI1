@@ -1,26 +1,29 @@
-# Release Notes - Nexus Discovery v4.0
+# Release Notes - DiscoverAI v4.0 (Full Base)
  
-**Date:** December 25, 2025
-**Theme:** "Deep Understanding"
+**Date:** December 30, 2025
+**Theme:** "Deep Understanding & Governance"
  
 ## 🌟 v4.0 Highlights
  
-Nexus Discovery v4.0 introduces the **Deep Dive** engine, enabling granular extraction of ETL logic and column-level lineage.
+Nexus Discovery v4.0 establishes the "Full Base" version of the platform, moving from simple extraction to structured enterprise-grade intelligence.
  
-### 1. Package Deep Dive
-- **Granular Extraction**: The system now breaks down ETL packages (SSIS, DataStage) into internal components (DataFlowTasks, SQLTasks, Containers).
-- **Intermediate Representation (IR)**: Normalization of business logic into a platform-agnostic format to facilitate future migrations.
+### 1. High-Fidelity structural Parsers
+- **SSIS & DataStage**: Native XML and metadata parsing for `.dtsx` and `.dsx` files, ensuring 100% accurate lineage extraction without LLM hallucinations.
  
-### 2. Column-Level Lineage
-- **Field-to-Field Mapping**: Precision tracking of data movement from source systems to targets, including intermediate transformation rules.
-- **Deep Lineage Table**: New dedicated storage for high-resolution field mappings with confidence scores.
+### 2. Hierarchical Prompt System (Sprint 2)
+- **4-Layer Composition**: Dynamic fusion of Base, Domain, Org, and Solution layers for project-specific intelligence.
+- **Prompt Matrix UI**: Redesigned administrative dashboard for managing global and solution-specific prompt fragments.
  
-### 3. Silent Mode & Automation
-- **Auto-Approval**: New `requires_approval: false` mode allows full end-to-end processing without manual plan confirmation.
-- **LLM Resilience**: Integrated automatic retries with exponential backoff for handling 429 rate limit errors from providers like OpenRouter.
+### 3. Governance Hub & Exports (Sprint 3)
+- **Manual Gateways**: Direct generation of metadata for **Microsoft Purview**, **Unity Catalog**, and **dbt** (`sources.yml`).
+- **Standardized Lineage**: Column-level results exported in platform-specific formats for easy ingestion.
  
-### 4. Optimized Model
-- **Gemini 2.0 Flash Lite**: Configured as the primary model for technical extraction, providing superior speed and cost-effectiveness.
+### 4. integrated Documentation (V5 Phase 1)
+- **In-App Guides**: Integrated help overlays in the Prompt Manager and Model Config to bridge the technical knowledge gap.
+ 
+### 5. Silent Mode & LLM Resilience
+- **Automation**: `requires_approval: false` for full E2E processing.
+- **Backoff System**: Automated retry logic for 429 rate limit errors.
 
 ---
 

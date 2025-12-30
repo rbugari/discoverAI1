@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { Plus, Loader2, Trash2, RefreshCw, Settings, Network, LayoutGrid } from 'lucide-react';
+import { Plus, Loader2, Trash2, RefreshCw, Settings, Network, LayoutGrid, FileCode } from 'lucide-react';
 import axios from 'axios';
 import { ModeToggle } from '@/components/mode-toggle';
 
@@ -124,23 +124,32 @@ export default function DashboardPage() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Solutions</h1>
-        <div className="flex items-center gap-4">
-          <ModeToggle />
-          <Link
-            href="/admin/model-config"
-            className="text-muted-foreground hover:text-primary transition-colors p-2"
-            title="Global Settings"
-          >
-            <Settings size={20} />
-          </Link>
-          <Link
-            href="/solutions/new"
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-md flex items-center gap-2 hover:bg-primary/90 transition-colors shadow-sm"
-          >
-            <Plus size={16} />
-            New Solution
-          </Link>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-4">
+            <LayoutGrid className="text-primary" size={32} />
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Your Solutions</h1>
+              <p className="text-muted-foreground">Manage and explore your data lineage projects</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 border-r pr-4 mr-2 border-border">
+              <Link href="/admin/model-config" className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary rounded-lg transition-all" title="Model Configuration">
+                <Settings size={20} />
+              </Link>
+              <Link href="/admin/prompts" className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary rounded-lg transition-all" title="Prompts & Agents">
+                <FileCode size={20} />
+              </Link>
+            </div>
+            <ModeToggle />
+            <Link
+              href="/solutions/new"
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:bg-primary/90 transition-all flex items-center gap-2"
+            >
+              <Plus size={18} />
+              New Solution
+            </Link>
+          </div>
         </div>
       </div>
 

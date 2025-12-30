@@ -1,47 +1,37 @@
-# Nexus Discovery - Roadmap & Known Issues
+# DiscoverAI - Roadmap & Release Strategy
 
-## 🚀 Released (v4.0) - "Deep Understanding"
-- [x] **Package Deep Dive**: Granular extraction of SSIS/DataStage internal components.
-- [x] **Column-Level Lineage**: Back-end support for field-to-field mapping and transformation rules.
-- [x] **Silent Mode**: Automated end-to-end processing without manual approval.
-- [x] **LLM Resilience**: Automatic retries for rate-limited (429) provider calls.
-- [x] **Optmized Model**: Integration of Gemini 2.0 Flash Lite for technical extraction.
+## ✅ Released: v4.0 "High-Fidelity Core"
+The full base version of DiscoverAI.
+- [x] **Hierarchical Prompting**: 4-layer intelligence (Base, Domain, Org, Solution).
+- [x] **Structural Parsers**: Accurate native parsing for SSIS (.dtsx) and DataStage (.dsx).
+- [x] **Governance Gateway**: Manual export system for Purview, Unity Catalog, and dbt.
+- [x] **Integrated Documentation**: Contextual 'Guide' panels in Prompt Manager and Model Config.
+- [x] **LLM Resilience**: Automated retry system for 429 errors.
 
-## 🚀 Released (v3.1) - "Plan & Control"
-- [x] **Planning Phase**: New orchestrator stage that scans files and generates execution plans.
-- [x] **Human-in-the-Loop UI**: Dashboard allows reviewing, enabling, and reordering.
-- [x] **Truly Incremental**: Hash-based logic to skip unchanged files.
-- [x] **Multi-provider Routing**: Support for Gemini/Llama via Groq/OpenRouter.
+---
 
-## Known Issues
-- **Neo4j Connectivity:** Transient "Unable to retrieve routing information" errors may occur with the free AuraDB tier. 
-  - *Status:* Retry logic implemented (3 attempts with backoff).
-- **Processing Time:** Large ZIP files (>50MB) may take several minutes to analyze.
-  - *Status:* Pending progress bar implementation.
-- **Columns Extraction:** Some complex SQL dialects might not yield 100% column coverage.
-  - *Status:* Fallback message added to UI.
+## 🚀 Incoming: v5.0 "Ecosystem & Experience"
+Focusing on seamless ingestion, automated syncs, and premium UI.
 
-## Future Roadmap (Next Release v3.2+)
+### 1. Ingestion & Automated Governance
+- [ ] **dbt Manifest Ingestion**: Read `manifest.json` to overlay existing dbt documentation on technical lineage.
+- [ ] **Direct Governance Sync**: Automated push to Unity Catalog/Purview via REST APIs (Phase 2).
+- [ ] **Incremental Deep Dive**: Re-analyze only the specific sub-tasks changed in a project.
 
-- **Real-time Progress Bar:** Replace the static "Processing" badge with a WebSocket or Polling-based progress bar showing:
-  - "Unzipping..."
-  - "Analyzing file 5/50..."
-  - "Building Graph..."
+### 2. UI/UX "WOW" Factor
+- [ ] **Interactive Lineage UI**: Drill-down from high-level packages to specific column transformations in the graph.
+- [ ] **Glassmorphic Dashboard**: Modernized analytics view with high-quality micro-animations.
+- [ ] **Real-time Progress Engine**: WebSocket-based progress bars for long-running analyses.
 
-### 2. Advanced Lineage & UI
-- [ ] **Column-Level Lineage UI**: Complete front-end visualization for field-level dependencies.
-- [ ] **Interactive Deep Dive**: Drill-down from packages to specific components in the UI.
-- [ ] **Impact Analysis**: "What-if" scenarios (e.g., "If I drop this column, what breaks?").
+### 3. Infrastructure & Scale
+- [ ] **Docker Deployment**: Full containerization for scale and easy on-premise installs.
+- [ ] **Cloud-Native Workers**: Auto-scaling job processors based on queue depth.
 
-### 3. Reporting
-- **PDF Export:** Generate a printable PDF report of the solution documentation.
-- **Enhanced CSV:** Add more metadata fields to the CSV export.
+---
 
-### 4. Infrastructure
-- **Docker Support:** Containerize the API and Frontend for easier deployment.
-- **Redis Queue:** Replace in-memory background tasks with Celery/Redis for robust job management.
+## Known Issues (v4.0)
+- **Neo4j Connectivity:** Transient "routing information" errors in Free tier AuraDB. (Status: Retry logic active).
+- **Processing Scale:** ZIP files >50MB may experience UI timeouts while processing. (Status: Optimization scheduled for v5.1).
 
-### 5. Integrations & Governance
-- **Unity Catalog Sync:** Push discovered lineage and tags to Databricks Unity Catalog.
-- **Microsoft Purview Sync:** Integration with Azure Purview for enterprise data governance.
-- **dbt Integration:** Native parsing of dbt manifests for richer lineage extraction.
+---
+© 2025 DiscoverAI

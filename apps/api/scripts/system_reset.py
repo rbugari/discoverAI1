@@ -30,18 +30,37 @@ def reset_supabase():
         
         # Map tables to their Primary Keys for safe deletion
         table_pks = {
-            "edge_evidence": "edge_id", # Actually composite, but deleting by edge_id works if we delete all
+            "code_embeddings": "id",
+            "column_lineage": "lineage_id",
+            "transformation_ir": "ir_id",
+            "package_component": "component_id",
+            "package": "package_id",
+            "file_processing_log": "id",
+            "job_plan_item": "item_id",
+            "job_plan_area": "area_id",
+            "job_plan": "plan_id",
+            "edge_evidence": "edge_id",
             "edge_index": "edge_id",
             "asset_version": "asset_version_id",
             "asset": "asset_id",
             "job_stage_run": "id",
             "job_queue": "id",
             "job_run": "job_id",
-            "jobs": "id",
-            "evidence": "evidence_id"
+            "evidence": "evidence_id",
+            "solutions": "id"
         }
         
+        # Deletion order (child tables first)
         tables = [
+            "code_embeddings",
+            "column_lineage",
+            "transformation_ir",
+            "package_component",
+            "package",
+            "file_processing_log",
+            "job_plan_item",
+            "job_plan_area",
+            "job_plan",
             "edge_evidence",
             "edge_index",
             "asset_version",
@@ -49,8 +68,8 @@ def reset_supabase():
             "job_stage_run",
             "job_queue",
             "job_run",
-            "jobs",
-            "evidence"
+            "evidence",
+            "solutions"
         ]
         
         for table in tables:

@@ -1,4 +1,7 @@
-# DiscoverAI v3.0 — Anexos técnicos
+# DiscoverAI v3.0 — Anexos técnicos (LEGACY)
+
+> [!NOTE]
+> Este documento se mantiene como **referencia técnica histórica**. Todos los contratos de la v4.0 están ahora consolidados en [MASTER_SPEC_v4.md](../MASTER_SPEC_v4.md).
 
 Este documento **complementa** la SPEC v3.0 principal y debe entregarse **junto al spec** al generador de código.
 

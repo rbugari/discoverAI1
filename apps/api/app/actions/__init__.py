@@ -12,7 +12,9 @@ from datetime import datetime
 from ..router import get_model_router, ActionConfig, ModelConfig
 from ..audit import FileProcessingLogger
 from ..services.llm_adapter import get_llm_adapter
+from ..services.prompt_service import PromptService
 from ..config import settings
+from supabase import create_client
 
 @dataclass
 class ActionResult:
@@ -43,6 +45,11 @@ class ActionRunner:
         self.router = get_model_router()
         self.logger = logger or FileProcessingLogger()
         self.llm_service = get_llm_adapter()
+        
+        # v4.0 Prompt Service
+        from ..routers.solutions import get_supabase
+        self.supabase = get_supabase()
+        self.prompt_service = PromptService(self.supabase)
         
         # Estimaciones de costo por modelo (USD por 1K tokens)
         self.cost_estimates = {
@@ -126,8 +133,8 @@ class ActionRunner:
         start_time = time.time()
         
         try:
-            # Cargar prompt
-            prompt_content = self._load_prompt(model_config.prompt_file, input_data, context)
+            # v4.0 Composed Prompt
+            prompt_content = self.prompt_service.get_composed_prompt(model_config.prompt_file, input_data, context)
             print(f"!!! MEGA TRACE: _execute_single_model using {model_config.model} (Provider: {model_config.provider})")
             
             # Preparar mensajes para LLM
@@ -411,6 +418,10 @@ Respond with JSON containing your analysis.
     def _validate_json_schema(self, data: Dict[str, Any], prompt_file: str) -> Optional[str]:
         """Valida el JSON contra el esquema esperado"""
         try:
+            # Skip validation for deep_dive as it has a different structure
+            if "deep_dive" in prompt_file:
+                return None
+
             if "extract" in prompt_file:
                 # Validar que tenga nodes y edges
                 if "nodes" not in data:
