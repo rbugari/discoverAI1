@@ -94,6 +94,34 @@ async def update_project_action_prompt_mapping(mapping: ProjectActionPromptMappi
         raise HTTPException(status_code=500, detail="Failed to update project mapping")
     return res.data[0]
 
+# --- Model Config YAML Editor ---
+
+@router.get("/model-config/file")
+async def get_config_file(path: str):
+    """Reads the raw text of a configuration file."""
+    config_dir = os.path.join(os.path.dirname(__file__), "..", "..", "config")
+    manager = ConfigManager(config_dir)
+    try:
+        content = manager.read_config_file(path)
+        return {"content": content, "path": path}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+class SaveConfigRequest(BaseModel):
+    path: str
+    content: str
+
+@router.post("/model-config/file")
+async def save_config_file(req: SaveConfigRequest):
+    """Saves raw text to a configuration file."""
+    config_dir = os.path.join(os.path.dirname(__file__), "..", "..", "config")
+    manager = ConfigManager(config_dir)
+    try:
+        manager.write_config_file(req.path, req.content)
+        return {"status": "success", "message": f"Saved {req.path}"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/cleanup")
 async def admin_cleanup_database():
     """Nuclear option from main.py"""

@@ -114,7 +114,7 @@ class ModelRouter:
         primary_config = ModelConfig(
             model=action_cfg.get("model", "unknown"),
             prompt_file=action_cfg.get("prompt_file", f"prompts/{action_name}.md"),
-            provider=self.provider_name,
+            provider=action_cfg.get("provider", self.provider_name), # Action level override
             temperature=action_cfg.get("temperature", defaults.get("temperature", 0.1)),
             max_tokens=action_cfg.get("max_tokens", defaults.get("max_tokens", 4000)),
             timeout_ms=action_cfg.get("timeout_ms", defaults.get("timeout_ms", 60000))

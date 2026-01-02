@@ -9,25 +9,25 @@ interface GovernanceViewProps {
 
 export default function GovernanceView({ solutionId }: GovernanceViewProps) {
   const [integrations] = useState([
-    { 
-      id: 'dbt', 
-      name: 'dbt Cloud / Core', 
-      icon: <FileCode className="text-orange-500" />, 
-      status: 'pending', 
+    {
+      id: 'dbt',
+      name: 'dbt Cloud / Core',
+      icon: <FileCode className="text-orange-500" />,
+      status: 'pending',
       description: 'Ingest manifest.json to enrich lineage with dbt models and meta.'
     },
-    { 
-      id: 'unity', 
-      name: 'Databricks Unity Catalog', 
-      icon: <Database className="text-blue-500" />, 
-      status: 'not_configured', 
+    {
+      id: 'unity',
+      name: 'Databricks Unity Catalog',
+      icon: <Database className="text-blue-500" />,
+      status: 'not_configured',
       description: 'Sync discovered assets to Unity Catalog as external tables.'
     },
-    { 
-      id: 'purview', 
-      name: 'Microsoft Purview', 
-      icon: <Share2 className="text-purple-500" />, 
-      status: 'not_configured', 
+    {
+      id: 'purview',
+      name: 'Microsoft Purview',
+      icon: <Share2 className="text-purple-500" />,
+      status: 'not_configured',
       description: 'Push technical metadata to Purview Data Map.'
     }
   ]);
@@ -43,45 +43,46 @@ export default function GovernanceView({ solutionId }: GovernanceViewProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {integrations.map((it) => (
-          <div key={it.id} className="border rounded-xl p-6 bg-card hover:shadow-md transition-shadow flex flex-col justify-between">
-            <div className="space-y-4">
+          <div key={it.id} className="border rounded-[2rem] p-8 bg-card hover:bg-primary/5 hover:border-primary/20 transition-all flex flex-col justify-between group">
+            <div className="space-y-6">
               <div className="flex justify-between items-start">
-                <div className="p-3 bg-muted rounded-lg">
+                <div className="p-4 bg-muted rounded-2xl group-hover:bg-primary/10 transition-colors">
                   {it.icon}
                 </div>
                 {it.status === 'not_configured' ? (
-                  <span className="text-[10px] bg-muted text-muted-foreground px-2 py-1 rounded-full uppercase font-bold tracking-wider">Not Configured</span>
+                  <span className="text-[9px] bg-muted text-muted-foreground/60 px-3 py-1.5 rounded-lg uppercase font-black tracking-widest">Not Configured</span>
                 ) : (
-                  <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-1 rounded-full uppercase font-bold tracking-wider">Ready to connect</span>
+                  <span className="text-[9px] bg-primary/10 text-primary px-3 py-1.5 rounded-lg uppercase font-black tracking-widest border border-primary/20">Ready to connect</span>
                 )}
               </div>
               <div>
-                <h3 className="font-bold">{it.name}</h3>
-                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                <h3 className="text-lg font-black tracking-tight">{it.name}</h3>
+                <p className="text-xs font-medium text-muted-foreground/60 mt-3 leading-relaxed">
                   {it.description}
                 </p>
               </div>
             </div>
-            <button className="w-full mt-6 py-2 px-4 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
-              Configure
+            <button className="w-full mt-8 py-3 px-6 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all hover:scale-[1.02]">
+              Configure Integration
             </button>
           </div>
         ))}
       </div>
 
-      <div className="mt-12 p-6 border border-dashed rounded-xl bg-muted/30">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-primary/10 rounded-full">
+      <div className="mt-12 p-8 border border-primary/10 rounded-[2.5rem] bg-primary/5 relative overflow-hidden group">
+        <div className="flex items-center gap-6 relative z-10">
+          <div className="p-4 bg-primary/10 rounded-2xl">
             <AlertCircle className="text-primary" />
           </div>
           <div>
-            <h4 className="font-bold text-sm">Próximos Pasos</h4>
-            <p className="text-xs text-muted-foreground mt-1">
-              Las integraciones con Unity Catalog y Purview requieren credenciales de Service Principal. 
-              La ingesta de dbt permite cargar el archivo `manifest.json` directamente.
+            <h4 className="font-black text-xs uppercase tracking-widest text-primary mb-2">Next Steps & Intelligence</h4>
+            <p className="text-[11px] font-medium text-muted-foreground/80 leading-relaxed italic">
+              Unity Catalog and Microsoft Purview integrations require Service Principal credentials for deep sync.
+              The dbt ingestion engine supports direct `manifest.json` uploads to enrich logical lineage and metadata tags.
             </p>
           </div>
         </div>
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
       </div>
     </div>
   );

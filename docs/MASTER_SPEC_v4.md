@@ -1,8 +1,8 @@
-# DiscoverAI — Master Technical Spec v4.0 (Full Base)
+# DiscoverAI — Master Technical Spec v6.0 (Immersive Intelligence)
 
 > Documento maestro para implementación técnica (backend + frontend + config + DB).  
 > Destinatario: **Generador de código / equipo técnico**.  
-> Estado: **v4.0 Full Base - Estabilizado**.
+> Estado: **v6.0 Full Core - Estabilizado**.
 
 ---
 
@@ -66,18 +66,20 @@ DiscoverAI v4.0 actúa como un gateway hacia catálogos externos:
 
 ---
 
-## 5. Auditoría y Resiliencia
+## 5. Auditoría y Resiliencia (v6.0 Optimization)
 - **Audit Logs**: Registro granular de cada llamada al LLM (tokens, latencia, coste).
-- **Retry Engine**: Manejo automático de errores 429 con backoff exponencial.
+- **Optimization Auditor**: Motor de detección de brechas que genera parches de "Solution Layer" para mejorar la precisión.
+- **Retry Engine**: Manejo automático de errores 429 con backoff exponencial y rotación selectiva de proveedores.
+- **Professional reporting**: Generación automatizada de reportes maestros (PDF/MD) con síntesis técnica del Reasoning Agent.
 - **Integrated Help**: Guías contextuales integradas en la UI para democratizar el ajuste técnico.
 
 ---
 
-## 6. Roadmap Proyectado (v5.0+)
+## 6. Roadmap Proyectado (v7.0+)
+- **Column-level Visualization**: Drill-down exhaustivo en la UI para linaje campo a campo.
 - Ingesto de dbt Manifest.
-- Sincronización automática vía API (Direct Sync).
-- Visualización interactiva de linaje nivel columna.
-- UI Moderna con micro-interacciones.
+- Sincronización automática vía API (Direct Sync) con Azure Purview.
+- UI Moderna con micro-interacciones avanzadas y temas personalizables.
 
 ---
 © 2025 DiscoverAI | Engineering Mastery

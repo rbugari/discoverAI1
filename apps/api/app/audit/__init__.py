@@ -1,6 +1,6 @@
 """
-Sistema de Auditoría de Procesamiento de Archivos
-Registra qué pasó con cada archivo: modelos usados, tokens, errores, etc.
+File Processing Audit System
+Logs what happened with each file: models used, tokens, errors, etc.
 """
 import uuid
 import time
@@ -15,7 +15,7 @@ from ..config import settings
 
 @dataclass
 class FileProcessingLog:
-    """Datos de auditoría para procesamiento de archivo"""
+    """Audit data for file processing"""
     job_id: str
     file_path: str
     file_size_bytes: Optional[int] = None
@@ -50,8 +50,8 @@ class FileProcessingLog:
 
 class FileProcessingLogger:
     """
-    Logger especializado para registrar el procesamiento de archivos
-    con detalle de modelos usados, tokens, errores, etc.
+    Specialized logger for recording file processing details
+    including models used, tokens, errors, etc.
     """
     
     def __init__(self, supabase_client: Optional[Client] = None):
@@ -70,10 +70,10 @@ class FileProcessingLogger:
         file_hash: Optional[str] = None
     ) -> str:
         """
-        Inicia el registro de procesamiento de un archivo
+        Starts the processing log for a file
         
         Returns:
-            log_id para usar en updates posteriores
+            log_id for subsequent updates
         """
         log_id = str(uuid.uuid4())
         
@@ -89,25 +89,25 @@ class FileProcessingLogger:
         
         self._current_logs[log_id] = log_entry
         
-        # Insertar en DB
+        # Insert into DB
         try:
             log_data = asdict(log_entry)
-            log_data['id'] = log_id # Fix: Assign the generated ID to the 'id' column
-            # Convertir datetime a string ISO
+            log_data['id'] = log_id # Assign the generated ID to the 'id' column
+            # Convert datetime to ISO string
             if log_data['created_at']:
                 log_data['created_at'] = log_data['created_at'].isoformat()
             if log_data['updated_at']:
                 log_data['updated_at'] = log_data['updated_at'].isoformat()
             
-            # Convertir lista a JSON para PostgreSQL
+            # Convert list to JSON for PostgreSQL
             if log_data['fallback_chain']:
                 log_data['fallback_chain'] = json.dumps(log_data['fallback_chain'])
             
             result = self.supabase.table('file_processing_log').insert(log_data).execute()
             
         except Exception as e:
-            print(f"[AUDIT] Error al iniciar log de archivo {file_path}: {e}")
-            # No fallamos el procesamiento por error de auditoría
+            print(f"[AUDIT] Error starting log for file {file_path}: {e}")
+            # Do not fail processing due to audit error
         
         return log_id
     
@@ -119,7 +119,7 @@ class FileProcessingLogger:
         fallback_used: bool = False,
         fallback_chain: Optional[List[str]] = None
     ):
-        """Actualiza información del modelo usado"""
+        """Updates information about the model used"""
         if log_id not in self._current_logs:
             return
         
@@ -138,7 +138,7 @@ class FileProcessingLogger:
         cost_estimate: Optional[float] = None,
         latency_ms: Optional[int] = None
     ):
-        """Actualiza métricas de tokens y costos"""
+        """Updates token and cost metrics"""
         if log_id not in self._current_logs:
             return
         
@@ -158,7 +158,7 @@ class FileProcessingLogger:
         evidences_extracted: int = 0,
         result_data: Optional[dict] = None
     ):
-        """Actualiza resultados del procesamiento"""
+        """Updates processing results"""
         if log_id not in self._current_logs:
             return
         
@@ -167,7 +167,7 @@ class FileProcessingLogger:
         log_entry.edges_extracted = edges_extracted
         log_entry.evidences_extracted = evidences_extracted
         
-        # Generar hash del resultado para deduplicación
+        # Generate result hash for deduplication
         if result_data:
             result_json = json.dumps(result_data, sort_keys=True)
             log_entry.result_hash = hashlib.sha256(result_json.encode()).hexdigest()[:16]
@@ -180,7 +180,7 @@ class FileProcessingLogger:
         status: str = "success",
         strategy_used: Optional[str] = None
     ):
-        """Completa el procesamiento del archivo"""
+        """Completes file processing"""
         if log_id not in self._current_logs:
             return
         
@@ -189,11 +189,11 @@ class FileProcessingLogger:
         log_entry.strategy_used = strategy_used
         log_entry.updated_at = datetime.utcnow()
         
-        # Actualizar en DB
+        # Update in DB
         try:
             log_data = asdict(log_entry)
             
-            # Convertir tipos para PostgreSQL
+            # Convert types for PostgreSQL
             log_data['updated_at'] = log_data['updated_at'].isoformat()
             if log_data['created_at']:
                 log_data['created_at'] = log_data['created_at'].isoformat()
@@ -203,11 +203,11 @@ class FileProcessingLogger:
             
             result = self.supabase.table('file_processing_log').update(log_data).eq('id', log_id).execute()
             
-            # Limpiar de memoria
+            # Clean memory
             del self._current_logs[log_id]
             
         except Exception as e:
-            print(f"[AUDIT] Error al completar log {log_id}: {e}")
+            print(f"[AUDIT] Error completing log {log_id}: {e}")
     
     def log_file_error(
         self,
@@ -216,7 +216,7 @@ class FileProcessingLogger:
         error_message: str,
         retry_count: int = 0
     ):
-        """Registra error en procesamiento de archivo"""
+        """Logs file processing error"""
         if log_id not in self._current_logs:
             return
         
@@ -227,7 +227,7 @@ class FileProcessingLogger:
         log_entry.status = "failed"
         log_entry.updated_at = datetime.utcnow()
         
-        # Actualizar en DB
+        # Update in DB
         try:
             log_data = {
                 'error_type': error_type,
@@ -240,31 +240,31 @@ class FileProcessingLogger:
             result = self.supabase.table('file_processing_log').update(log_data).eq('id', log_id).execute()
             
         except Exception as e:
-            print(f"[AUDIT] Error al registrar error de archivo {log_id}: {e}")
+            print(f"[AUDIT] Error logging file error {log_id}: {e}")
     
     def get_file_history(self, job_id: str, file_path: str) -> List[Dict[str, Any]]:
-        """Obtiene historial de procesamiento de un archivo"""
+        """Gets processing history for a file"""
         try:
             result = self.supabase.table('file_processing_log').select('*').eq('job_id', job_id).eq('file_path', file_path).order('created_at', desc=True).execute()
             return result.data or []
         except Exception as e:
-            print(f"[AUDIT] Error al obtener historial de archivo {file_path}: {e}")
+            print(f"[AUDIT] Error getting file history {file_path}: {e}")
             return []
     
     def get_job_files_summary(self, job_id: str) -> Dict[str, Any]:
-        """Obtiene resumen de archivos procesados en un job"""
+        """Gets summary of files processed in a job"""
         try:
-            # Total de archivos
+            # Total files
             total_result = self.supabase.table('file_processing_log').select('*', count='exact').eq('job_id', job_id).execute()
             
-            # Por estado
+            # By status
             success_result = self.supabase.table('file_processing_log').select('*', count='exact').eq('job_id', job_id).eq('status', 'success').execute()
             failed_result = self.supabase.table('file_processing_log').select('*', count='exact').eq('job_id', job_id).eq('status', 'failed').execute()
             
-            # Con fallbacks
+            # With fallbacks
             fallback_result = self.supabase.table('file_processing_log').select('*', count='exact').eq('job_id', job_id).eq('fallback_used', True).execute()
             
-            # Tokens y costos
+            # Tokens and costs
             stats_result = self.supabase.rpc('get_file_processing_stats', {'job_id_param': job_id}).execute()
             
             return {
@@ -276,7 +276,7 @@ class FileProcessingLogger:
             }
             
         except Exception as e:
-            print(f"[AUDIT] Error al obtener resumen de job {job_id}: {e}")
+            print(f"[AUDIT] Error getting job summary {job_id}: {e}")
             return {
                 'total_files': 0,
                 'successful_files': 0,
@@ -285,9 +285,9 @@ class FileProcessingLogger:
                 'stats': {}
             }
 
-# Función auxiliar para RPC de estadísticas
+# Aux function for RPC stats
 def create_file_processing_stats_rpc():
-    """Crea función RPC para estadísticas agregadas"""
+    """Creates RPC function for aggregate stats"""
     return """
     CREATE OR REPLACE FUNCTION get_file_processing_stats(job_id_param UUID)
     RETURNS TABLE (

@@ -15,11 +15,11 @@ class StorageService:
         OR Clones a Git Repository if URL is provided.
         """
         storage_path = storage_path.strip()
-        print(f"[STORAGE] Processing path: '{storage_path}'")
+        print(f"[STORAGE] Processing path: '{storage_path}'", flush=True)
         
         # 1. Check if it's a Git URL
         if storage_path.lower().startswith("http://") or storage_path.lower().startswith("https://"):
-            print("[STORAGE] Detected Git URL. Cloning...")
+            print("[STORAGE] Detected Git URL. Cloning...", flush=True)
             return self.clone_repo(storage_path)
 
         local_zip_path = os.path.join(settings.UPLOAD_DIR, os.path.basename(storage_path))
@@ -128,13 +128,13 @@ class StorageService:
             # If the .git directory exists, we assume the repo was downloaded but some files failed to extract.
             # We proceed with the files that ARE valid.
             if ge.status == 128 and os.path.exists(os.path.join(clone_dir, '.git')):
-                 print(f"[WARNING] Clone finished with checkout errors (likely Windows path compatibility). Continuing with available files. Details: {ge}")
+                 print(f"[WARNING] Clone finished with checkout errors (likely Windows path compatibility). Continuing with available files. Details: {ge}", flush=True)
                  return clone_dir
             else:
-                 print(f"[ERROR] Git Clone Failed: {ge}")
+                 print(f"[ERROR] Git Clone Failed: {ge}", flush=True)
                  raise ge
         except Exception as e:
-            print(f"Error cloning repository: {e}")
+            print(f"Error cloning repository: {e}", flush=True)
             raise e
 
     def walk_files(self, root_dir: str):

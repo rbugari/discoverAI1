@@ -1,5 +1,5 @@
 """
-Action Runner - Ejecuta acciones de LLM con soporte de fallbacks
+Action Runner - Executes LLM actions with fallback support
 """
 import time
 import json
@@ -18,13 +18,13 @@ from supabase import create_client
 
 @dataclass
 class ActionResult:
-    """Resultado de ejecutar una acción"""
+    """Result of executing an action"""
     success: bool
     data: Optional[Dict[str, Any]] = None
     error_message: Optional[str] = None
     error_type: Optional[str] = None
     
-    # Métricas
+    # Metrics
     model_used: Optional[str] = None
     latency_ms: Optional[int] = None
     tokens_in: Optional[int] = None
@@ -32,13 +32,13 @@ class ActionResult:
     total_tokens: Optional[int] = None
     cost_estimate_usd: Optional[float] = None
     
-    # Información de fallback
+    # Fallback information
     fallback_used: bool = False
     models_attempted: Optional[List[str]] = None
 
 class ActionRunner:
     """
-    Ejecuta acciones de LLM con soporte de fallbacks automáticos
+    Executes LLM actions with automatic fallback support
     """
     
     def __init__(self, logger: Optional[FileProcessingLogger] = None):
@@ -51,7 +51,7 @@ class ActionRunner:
         self.supabase = get_supabase()
         self.prompt_service = PromptService(self.supabase)
         
-        # Estimaciones de costo por modelo (USD por 1K tokens)
+        # Cost estimates per model (USD per 1K tokens)
         self.cost_estimates = {
             "llama-3.3-70b-versatile": 0.00059, # Groq
             "llama-3.1-8b-instant": 0.00005,    # Groq
@@ -73,24 +73,24 @@ class ActionRunner:
         log_id: Optional[str] = None
     ) -> ActionResult:
         """
-        Ejecuta una acción con su configuración primaria
+        Executes an action with its primary configuration
         
         Args:
-            action_name: Nombre de la acción (ej: 'triage_fast')
-            input_data: Datos de entrada para la acción
-            context: Contexto adicional (job_id, file_path, etc.)
-            log_id: ID del log de auditoría (opcional)
+            action_name: Name of the action (e.g., 'triage_fast')
+            input_data: Input data for the action
+            context: Additional context (job_id, file_path, etc.)
+            log_id: Audit log ID (optional)
             
         Returns:
-            ActionResult con el resultado de la ejecución
+            ActionResult with the execution result
         """
         start_time = time.time()
         
         try:
-            # Obtener configuración de la acción
+            # Get action configuration
             action_config = self.router.get_action_config(action_name)
             
-            # Ejecutar con el modelo primario
+            # Execute with primary model
             result = self._execute_single_model(
                 action_config.primary, 
                 input_data, 
@@ -98,7 +98,7 @@ class ActionRunner:
                 log_id
             )
             
-            # Si falló y hay fallbacks, intentarlos
+            # If failed and fallbacks exist, try them
             if not result.success and action_config.fallbacks:
                 return self._execute_fallbacks(
                     action_config.fallbacks,
@@ -112,7 +112,7 @@ class ActionRunner:
             return result
             
         except Exception as e:
-            error_msg = f"Error ejecutando acción '{action_name}': {str(e)}"
+            error_msg = f"Error executing action '{action_name}': {str(e)}"
             print(f"[ACTION_RUNNER] {error_msg}")
             
             return ActionResult(
@@ -129,22 +129,22 @@ class ActionRunner:
         context: Dict[str, Any],
         log_id: Optional[str] = None
     ) -> ActionResult:
-        """Ejecuta un modelo individual"""
+        """Executes a single model"""
         start_time = time.time()
         
         try:
             # v4.0 Composed Prompt
             prompt_content = self.prompt_service.get_composed_prompt(model_config.prompt_file, input_data, context)
-            print(f"!!! MEGA TRACE: _execute_single_model using {model_config.model} (Provider: {model_config.provider})")
+            print(f"[ACTION_RUNNER] Executing {model_config.model} (Provider: {model_config.provider})")
             
-            # Preparar mensajes para LLM
-            # Truncar input_data de forma segura (sin romper el JSON)
-            # Copiar input_data para no modificar el original
+            # Prepare messages for LLM
+            # Securely truncate input_data (without breaking JSON)
+            # Copy input_data to avoid modifying the original
             safe_input = input_data.copy()
             
-            # Si hay contenido grande, truncarlo ANTES de dumps
+            # Truncate large content BEFORE dumps
             if "content" in safe_input and isinstance(safe_input["content"], str):
-                if len(safe_input["content"]) > 100000: # Subir a 100k ya que el JSON será válido
+                if len(safe_input["content"]) > 100000: # Safe limit for large files
                     print(f"[ACTION_RUNNER] Truncating content from {len(safe_input['content'])} to 100000 chars")
                     safe_input["content"] = safe_input["content"][:100000] + "... (truncated)"
             
@@ -155,13 +155,13 @@ class ActionRunner:
                 {"role": "user", "content": input_json}
             ]
             
-            # Ejecutar LLM
+            # Call LLM
             llm_result = self.llm_service.call_model(
                 model=model_config.model,
                 messages=messages,
                 temperature=model_config.temperature,
                 max_tokens=model_config.max_tokens,
-                provider=model_config.provider  # Fixed: Use provider from config
+                provider=model_config.provider
             )
             
             latency_ms = int((time.time() - start_time) * 1000)
@@ -177,17 +177,17 @@ class ActionRunner:
                     latency_ms=latency_ms
                 )
             
-            # Parsear respuesta
+            # Parse response
             response_content = llm_result.get("content", "")
             
-            # Validar JSON si es necesario
+            # Validate JSON if required
             if self._requires_json_validation(model_config.prompt_file):
                 try:
-                    # Limpiar respuesta para extraer JSON
+                    # Clean response to extract JSON
                     cleaned_content = self._clean_json_response(response_content)
                     parsed_data = json.loads(cleaned_content)
                     
-                    # Validar contra esquema específico
+                    # Validate against specific schema
                     validation_error = self._validate_json_schema(
                         parsed_data, 
                         model_config.prompt_file
@@ -219,15 +219,14 @@ class ActionRunner:
             else:
                 response_data = {"content": response_content}
             
-            # Calcular costo estimado
+            # Estimate cost
             tokens_in = llm_result.get("tokens_in", 0)
             tokens_out = llm_result.get("tokens_out", 0)
             total_tokens = tokens_in + tokens_out
             cost_estimate_usd = self._estimate_cost(model_config.model, total_tokens)
             
-            # Actualizar log de auditoría si existe
+            # Update audit log if exists
             if log_id:
-                # Fixed: Use actual provider from config
                 self.logger.update_model_usage(log_id, model_config.provider, model_config.model)
                 self.logger.update_tokens_and_cost(
                     log_id, tokens_in, tokens_out, cost_estimate_usd, latency_ms
@@ -245,7 +244,7 @@ class ActionRunner:
             )
             
         except Exception as e:
-            error_msg = f"Error ejecutando modelo '{model_config.model}': {str(e)}"
+            error_msg = f"Error executing model '{model_config.model}': {str(e)}"
             print(f"[ACTION_RUNNER] {error_msg}")
             
             return ActionResult(
@@ -265,7 +264,7 @@ class ActionRunner:
         start_time: float,
         primary_model: str
     ) -> ActionResult:
-        """Ejecuta cadena de fallbacks"""
+        """Executes fallback chain"""
         
         print(f"[ACTION_RUNNER] Primary model '{primary_model}' failed, trying fallbacks...")
         
@@ -284,7 +283,7 @@ class ActionRunner:
             models_attempted.append(fallback_config.model)
             
             if result.success:
-                # Marcar que se usó fallback
+                # Mark that fallback was used
                 result.fallback_used = True
                 result.models_attempted = models_attempted
                 
@@ -300,7 +299,7 @@ class ActionRunner:
                 print(f"[ACTION_RUNNER] Fallback successful with {result.model_used}")
                 return result
         
-        # Todos los fallbacks fallaron
+        # All fallbacks failed
         print(f"[ACTION_RUNNER] All fallbacks exhausted. Models attempted: {models_attempted}")
         
         return ActionResult(
@@ -313,14 +312,12 @@ class ActionRunner:
         )
     
     def _load_prompt(self, prompt_file: str, input_data: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Carga y prepara el prompt"""
+        """Loads and prepares the prompt"""
         try:
-            # Construir path completo del prompt.
-            # __file__ = apps/api/app/actions/__init__.py
-            # prompt_dir = apps/api/app/prompts
+            # Build full prompt path
             prompt_dir = os.path.join(os.path.dirname(__file__), "..", "prompts")
             
-            # models.yml puede tener "prompts/file.txt", extraemos solo el nombre
+            # models.yml can contain "prompts/file.txt", extract only the basename
             filename = os.path.basename(prompt_file)
             
             prompt_path = os.path.join(prompt_dir, filename)
@@ -328,25 +325,17 @@ class ActionRunner:
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 prompt_template = f.read()
             
-            # Combinar input_data y context para interpolación
+            # Combine input_data and context for interpolation
             format_data = {**input_data, **context}
             
-            # Interpolar variables de forma segura
+            # Interpolate variables safely
             try:
-                # Usar format_map para ignorar claves faltantes si es necesario, 
-                # pero format() es estándar. Si faltan claves, fallará, lo cual es bueno para debugging.
-                # Sin embargo, los prompts pueden tener {json} que no son variables.
-                # Mejor hacemos un reemplazo manual de las claves conocidas o escapamos llaves.
-                
-                # Estrategia simple: Reemplazar solo las claves que sabemos que existen
+                # Simple strategy: Replace only known keys
                 for key, value in format_data.items():
                     if isinstance(value, str):
                         prompt_template = prompt_template.replace(f"{{{key}}}", value)
                     elif isinstance(value, (int, float, bool)):
                         prompt_template = prompt_template.replace(f"{{{key}}}", str(value))
-                        
-                # Para content que puede ser grande o json, a veces se pasa directo en messages,
-                # pero aquí el prompt template lo incluye.
                 
                 return prompt_template
             except Exception as fmt_e:
@@ -354,14 +343,14 @@ class ActionRunner:
                 return prompt_template
             
         except FileNotFoundError:
-            # Si no existe el archivo específico, usar prompt genérico
+            # If specific file not found, use generic prompt
             return self._get_generic_prompt(prompt_file, input_data, context)
         except Exception as e:
             print(f"[ACTION_RUNNER] Error loading prompt {prompt_file}: {e}")
             return self._get_generic_prompt(prompt_file, input_data, context)
     
     def _get_generic_prompt(self, prompt_file: str, input_data: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Prompt genérico cuando no se encuentra el archivo específico"""
+        """Generic prompt when specific file is not found"""
         
         if "triage" in prompt_file:
             return f"""
@@ -412,32 +401,32 @@ Respond with JSON containing your analysis.
 """
     
     def _requires_json_validation(self, prompt_file: str) -> bool:
-        """Determina si el prompt requiere validación JSON"""
+        """Determines if the prompt requires JSON validation"""
         return "extract" in prompt_file or "strict" in prompt_file
     
     def _validate_json_schema(self, data: Dict[str, Any], prompt_file: str) -> Optional[str]:
-        """Valida el JSON contra el esquema esperado"""
+        """Validates JSON against expected schema"""
         try:
             # Skip validation for deep_dive as it has a different structure
             if "deep_dive" in prompt_file:
                 return None
 
             if "extract" in prompt_file:
-                # Validar que tenga nodes y edges
+                # Ensure nodes and edges exist
                 if "nodes" not in data:
                     return "Missing 'nodes' field"
                 if "edges" not in data:
                     return "Missing 'edges' field"
                 
-                # Validar estructura de nodos
+                # Validate node structure
                 if not isinstance(data["nodes"], list):
                     return "'nodes' must be a list"
                 
-                # Validar estructura de edges
+                # Validate edge structure
                 if not isinstance(data["edges"], list):
                     return "'edges' must be a list"
                 
-                # Validar campos requeridos en nodos
+                # Validate required fields in nodes
                 for i, node in enumerate(data["nodes"]):
                     if not isinstance(node, dict):
                         return f"Node {i} must be an object"
@@ -446,7 +435,7 @@ Respond with JSON containing your analysis.
                     if "node_type" not in node:
                         return f"Node {i} missing 'node_type'"
                 
-                # Validar campos requeridos en edges (y filtrar los malos)
+                # Validate required fields in edges (filter invalid ones)
                 valid_edges = []
                 invalid_edges_count = 0
                 for i, edge in enumerate(data["edges"]):
@@ -458,25 +447,24 @@ Respond with JSON containing your analysis.
                 if invalid_edges_count > 0:
                      print(f"[ACTION_RUNNER] Warning: Ignored {invalid_edges_count} invalid edges in {prompt_file}")
                 
-                data["edges"] = valid_edges # Actualizar lista con solo los válidos
+                data["edges"] = valid_edges # Update list with valid only
             
-            return None  # Validación exitosa
+            return None  # Success
             
         except Exception as e:
             return f"Schema validation error: {str(e)}"
     
     def _clean_json_response(self, text: str) -> str:
-        """Limpia la respuesta del LLM para extraer solo el JSON"""
+        """Cleans LLM response to extract only JSON"""
         text = text.strip()
         
-        # Intentar encontrar bloque de código JSON
+        # Try to find JSON code block
         import re
         json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if json_match:
             return json_match.group(1)
             
-        # Si no hay bloque de código, intentar encontrar el primer { y el último }
-        # Esto es más agresivo pero necesario si el LLM devuelve texto alrededor
+        # If no code block, try to find first { and last }
         try:
             start = text.index('{')
             end = text.rindex('}') + 1
@@ -485,6 +473,6 @@ Respond with JSON containing your analysis.
             return text
 
     def _estimate_cost(self, model: str, tokens: int) -> float:
-        """Estima el costo en USD basado en el modelo y tokens"""
-        cost_per_1k = self.cost_estimates.get(model, 0.002)  # Default a 0.002 si no conocemos el modelo
+        """Estimates cost in USD based on model and tokens"""
+        cost_per_1k = self.cost_estimates.get(model, 0.002)  # Default to 0.002
         return (tokens / 1000) * cost_per_1k

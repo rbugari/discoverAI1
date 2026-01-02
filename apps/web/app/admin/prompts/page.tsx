@@ -189,17 +189,17 @@ export default function AdminPromptsPage() {
                                     <div
                                         key={layer.id}
                                         onClick={() => setEditingLayer(layer)}
-                                        className={`p-4 border rounded-xl cursor-pointer transition-all hover:shadow-sm ${editingLayer?.id === layer.id ? 'border-primary bg-primary/5' : 'bg-card'}`}
+                                        className={`p-5 border rounded-2xl cursor-pointer transition-all hover:shadow-lg ${editingLayer?.id === layer.id ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'bg-card hover:bg-muted/30 border-border'}`}
                                     >
                                         <div className="flex justify-between items-start">
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${layer.layer_type === 'BASE' ? 'bg-blue-100 text-blue-700' :
-                                                layer.layer_type === 'DOMAIN' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
+                                            <span className={`text-[9px] px-2 py-0.5 rounded-md font-black uppercase tracking-wider ${layer.layer_type === 'BASE' ? 'bg-orange-500/10 text-orange-600 border border-orange-500/20' :
+                                                layer.layer_type === 'DOMAIN' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' : 'bg-slate-500/10 text-slate-600 border border-slate-500/20'
                                                 }`}>
                                                 {layer.layer_type}
                                             </span>
                                         </div>
-                                        <h3 className="font-semibold text-sm mt-3">{layer.name}</h3>
-                                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 italic">
+                                        <h3 className="font-black text-sm mt-4 tracking-tight">{layer.name}</h3>
+                                        <p className="text-[10px] text-muted-foreground/60 mt-2 line-clamp-2 font-medium italic leading-relaxed">
                                             {layer.content.substring(0, 100)}...
                                         </p>
                                     </div>

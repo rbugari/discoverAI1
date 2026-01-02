@@ -1,46 +1,58 @@
-name: "OpenRouter Balanced (Gemini)"
-provider: "providers/openrouter.yml"
-
+name: OpenRouter Balanced (Gemini)
+provider: providers/openrouter.yml
 actions:
   planner.classifier:
-    model: "google/gemini-2.0-flash-lite-001"
+    model: google/gemini-2.0-flash-lite-001
     temperature: 0.1
     max_tokens: 1000
-    
   extract.schema:
-    model: "google/gemini-2.0-flash-lite-001"
-    prompt_file: "prompts/extract_sql.md"
+    model: google/gemini-2.0-flash-lite-001
+    prompt_file: prompts/extract_sql.md
     temperature: 0.0
     max_tokens: 4096
-    
   extract.lineage.package:
-    model: "google/gemini-2.0-flash-lite-001"
-    prompt_file: "prompts/extract_strict.md" # Packages usually use strict extractor
+    model: google/gemini-2.0-flash-lite-001
+    prompt_file: prompts/extract_strict.md
     temperature: 0.0
     max_tokens: 8000
-    
   extract.python:
-    model: "google/gemini-2.0-flash-lite-001"
-    prompt_file: "prompts/extract_python.md"
+    model: google/gemini-2.0-flash-lite-001
+    prompt_file: prompts/extract_python.md
     temperature: 0.0
     max_tokens: 8000
-    
   extract.strict:
-    model: "google/gemini-2.0-flash-lite-001"
-    prompt_file: "prompts/extract_strict.md"
+    model: google/gemini-2.0-flash-lite-001
+    prompt_file: prompts/extract_strict.md
     temperature: 0.0
     max_tokens: 8000
-    
   summarize.asset:
-    model: "google/gemini-2.0-flash-lite-001"
+    model: google/gemini-2.0-flash-lite-001
     temperature: 0.2
-    
   qa.chat:
-    model: "google/gemini-2.0-flash-lite-001"
+    model: google/gemini-2.0-flash-lite-001
     temperature: 0.5
-
   extract.deep_dive:
-    model: "google/gemini-2.0-flash-lite-001"
-    prompt_file: "prompts/extract_deep_dive.md"
+    model: google/gemini-2.0-flash-lite-001
+    prompt_file: prompts/extract_deep_dive.md
     temperature: 0.0
     max_tokens: 8000
+  extract.lineage.sql:
+    model: allenai/olmo-3.1-32b-think:free
+    temperature: 0.1
+    max_tokens: 4096
+  generate.dbt:
+    model: allenai/olmo-3.1-32b-think:free
+    temperature: 0.3
+    max_tokens: 2000
+  reasoning.architect:
+    model: allenai/olmo-3.1-32b-think:free
+    temperature: 0.3
+    max_tokens: 2000
+  expert.report:
+    model: allenai/olmo-3.1-32b-think:free
+    temperature: 0.3
+    max_tokens: 2000
+  action.analyze_iteration:
+    model: allenai/olmo-3.1-32b-think:free
+    temperature: 0.3
+    max_tokens: 2000

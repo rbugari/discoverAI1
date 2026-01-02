@@ -8,21 +8,24 @@ from supabase import Client
 from fpdf import FPDF
 import io
 
+from .artifact_service import ArtifactService
+
 logger = logging.getLogger(__name__)
 
 class ReportService:
     def __init__(self, supabase: Client):
         self.supabase = supabase
+        self.artifacts = ArtifactService()
 
     async def get_solution_summary(self, solution_id: str) -> Dict[str, Any]:
-        """Obtiene un resumen estructurado para el reporte"""
-        # 1. Info de la solución
+        """Fetches a structured summary for the report"""
+        # 1. Solution Info
         sol_res = self.supabase.table("solutions").select("*").eq("id", solution_id).single().execute()
         solution = sol_res.data
         if not solution:
              raise Exception(f"Solution {solution_id} not found")
 
-        # 2. Conteo de activos por tipo
+        # 2. Asset count by type
         assets_res = self.supabase.table("asset").select("asset_id, asset_type, name_display").eq("project_id", solution_id).execute()
         assets = assets_res.data or []
         
@@ -31,11 +34,11 @@ class ReportService:
             at = a.get("asset_type", "Unknown")
             asset_types[at] = asset_types.get(at, 0) + 1
         
-        # 3. Ultimo job run
+        # 3. Last job run
         job_res = self.supabase.table("job_run").select("*").eq("project_id", solution_id).order("created_at", desc=True).limit(1).execute()
         last_job = job_res.data[0] if job_res.data else None
 
-        # 4. Estadísticas de auditoría
+        # 4. Audit statistics
         audit_res = self.supabase.table("file_processing_log")\
             .select("model_used, total_tokens, cost_estimate_usd")\
             .eq("job_id", last_job["job_id"] if last_job else "")\
@@ -44,7 +47,7 @@ class ReportService:
         total_cost = sum([float(x.get("cost_estimate_usd") or 0) for x in audit_res.data])
         total_tokens = sum([int(x.get("total_tokens") or 0) for x in audit_res.data])
 
-        # 5. Relaciones (Edges)
+        # 5. Relationships (Edges)
         edges_res = self.supabase.table("edge_index").select("edge_type").eq("project_id", solution_id).execute()
         edges = edges_res.data or []
         edge_types = {}
@@ -52,7 +55,7 @@ class ReportService:
             et = e.get("edge_type", "DEPENDS_ON")
             edge_types[et] = edge_types.get(et, 0) + 1
 
-        # 6. Paquetes
+        # 6. Packages
         pkg_res = self.supabase.table("package").select("name, type").eq("project_id", solution_id).execute()
         packages = pkg_res.data or []
 
@@ -75,7 +78,7 @@ class ReportService:
         }
 
     def generate_pdf_buffer(self, data: Dict[str, Any]):
-        """Genera el binario del PDF usando fpdf2 con un diseño profesional"""
+        """Generates the PDF binary using fpdf2 with a professional design"""
         class PDF(FPDF):
             def header(self):
                 self.set_font('Arial', 'B', 8)
@@ -224,3 +227,56 @@ class ReportService:
 
         # Output to bytes
         return bytes(pdf.output())
+
+    def generate_markdown_summary(self, data: Dict[str, Any]) -> str:
+        """Generates a professional Markdown summary of the discovery."""
+        md = f"# Architecture Discovery Report: {data['solution_name']}\n\n"
+        md += f"*Generated on: {data['generated_at']}*\n\n"
+        
+        md += "## Executive Summary\n"
+        md += f"- **Status**: {data['status']}\n"
+        md += f"- **Total Assets**: {data['asset_count']}\n"
+        md += f"- **Total Dependencies**: {data['edge_count']}\n"
+        md += f"- **Packages Identified**: {len(data['packages'])}\n\n"
+        
+        md += "## Asset Inventory\n"
+        md += "| Asset Type | Count |\n| --- | --- |\n"
+        for atype, count in data['asset_types'].items():
+            md += f"| {atype} | {count} |\n"
+        md += "\n"
+        
+        if data['edge_types']:
+            md += "## Dependency Analysis\n"
+            md += "| Relationship Type | Count |\n| --- | --- |\n"
+            for etype, count in data['edge_types'].items():
+                md += f"| {etype} | {count} |\n"
+            md += "\n"
+        
+        md += "## Performance & Intelligence Metrics\n"
+        last_job = data.get('last_job', {})
+        md += f"- **Tokens Processed**: {last_job.get('tokens', 0)}\n"
+        md += f"- **Estimated Cost**: ${last_job.get('cost_usd', 0):.4f} USD\n"
+        
+        return md
+
+    async def generate_and_save_latest_artifacts(self, solution_id: str):
+        """
+        Creates both PDF and MD reports for the latest state of the solution
+        and saves them to the Artifact Sandbox.
+        """
+        try:
+            print(f"[REPORTS] Generating automated artifacts for solution {solution_id}")
+            data = await self.get_solution_summary(solution_id)
+            
+            # 1. PDF
+            pdf_bytes = self.generate_pdf_buffer(data)
+            self.artifacts.save_artifact(solution_id, "architecture_report.pdf", pdf_bytes)
+            
+            # 2. Markdown
+            md_content = self.generate_markdown_summary(data)
+            self.artifacts.save_artifact(solution_id, "architecture_report.md", md_content)
+            
+            print(f"[REPORTS] Successfully saved artifacts for {solution_id}")
+        except Exception as e:
+            logger.error(f"Failed to generate automated artifacts: {e}")
+            print(f"[REPORTS] ERROR: {e}")

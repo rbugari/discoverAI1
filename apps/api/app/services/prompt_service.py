@@ -32,6 +32,7 @@ class PromptService:
                 if layers.get("domain"): composed.append(f"\n### DOMAIN SPECIALIZED INSTRUCTIONS\n{layers['domain']}")
                 if layers.get("org"): composed.append(f"\n### ORGANIZATIONAL GUIDELINES\n{layers['org']}")
                 if layers.get("solution"): composed.append(f"\n### PROJECT-SPECIFIC RULES (SOLUTION LAYER)\n{layers['solution']}")
+                if layers.get("reasoner"): composed.append(f"\n### REASONING AGENT INSTRUCTIONS\n{layers['reasoner']}")
                 full_prompt = "\n\n".join(composed)
             
             # 2. Interpolate variables
@@ -68,7 +69,8 @@ class PromptService:
                 layers = {
                     "base": row.get("base", {}).get("content") if row.get("base") else None,
                     "domain": row.get("domain", {}).get("content") if row.get("domain") else None,
-                    "org": row.get("org", {}).get("content") if row.get("org") else None
+                    "org": row.get("org", {}).get("content") if row.get("org") else None,
+                    "reasoner": row.get("reasoner", {}).get("content") if row.get("reasoner") else None
                 }
 
             # 2. Query Project-Specific (Solution) Layer

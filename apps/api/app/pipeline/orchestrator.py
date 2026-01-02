@@ -24,6 +24,11 @@ from ..services.catalog import CatalogService
 from ..services.planner import PlannerService
 from ..services.extractors.ssis import SSISParser
 from ..services.extractors.datastage import DataStageParser
+from ..services.auditor import DiscoveryAuditor
+from ..services.refiner import DiscoveryRefiner
+from ..services.prompt_service import PromptService
+from ..services.reasoning_service import ReasoningService
+from ..services.report_service import ReportService
 from ..config import settings
 
 @dataclass
@@ -81,6 +86,11 @@ class PipelineOrchestrator:
             
         self.catalog = CatalogService(self.supabase)
         self.planner = PlannerService(self.supabase)
+        self.auditor = DiscoveryAuditor(self.supabase)
+        self.refiner = DiscoveryRefiner(self.auditor, self.action_runner)
+        self.prompt_service = PromptService(self.supabase)
+        self.reasoning = ReasoningService(self.supabase, self.catalog, self.prompt_service)
+        self.reports = ReportService(self.supabase)
         
         # Métricas
         self.metrics = PipelineMetrics()
@@ -97,7 +107,7 @@ class PipelineOrchestrator:
         3. If Approved -> Execute
         4. Else -> Stop & Wait
         """
-        print(f"[PIPELINE v3] Starting pipeline for job {job_id}")
+        print(f"[PIPELINE v3] Starting pipeline for job {job_id}", flush=True)
         
         try:
             # 1. Ingest
@@ -116,27 +126,37 @@ class PipelineOrchestrator:
             
             # Case A: No Plan -> Create Plan
             if not current_plan_id:
-                print(f"[PIPELINE v3] No plan found. Entering Planning Phase.")
-                self._update_job_progress(job_id, "planning")
-                
-                plan_id = self.planner.create_plan(job_id, local_artifact_path)
-                print(f"[PIPELINE v3] Plan created: {plan_id}. Waiting for approval.")
-                
-                # If legacy mode (requires_approval=False), auto-approve immediately
-                if not requires_approval:
-                     print(f"[PIPELINE v3] Auto-approving plan (Legacy Mode)")
-                     self.supabase.table("job_plan").update({"status": JobPlanStatus.APPROVED}).eq("plan_id", plan_id).execute()
-                     self.supabase.table("job_run").update({"requires_approval": False}).eq("job_id", job_id).execute()
-                     current_plan_id = plan_id
-                else:
-                    return True # Stop here, wait for UI
+                try:
+                    print(f"[PIPELINE v3] Starting Case A: New Solution. Needs Planning.", flush=True)
+                    self._update_job_progress(job_id, "planning")
+                    
+                    plan_id = self.planner.create_plan(job_id, local_artifact_path)
+                    print(f"[PIPELINE v3] Plan created: {plan_id}. Waiting for approval.", flush=True)
+                    
+                    # If legacy mode (requires_approval=False), auto-approve immediately
+                    if not requires_approval:
+                         print(f"[PIPELINE v3] Auto-approving plan (Legacy Mode)", flush=True)
+                         self.supabase.table("job_plan").update({"status": JobPlanStatus.APPROVED}).eq("plan_id", plan_id).execute()
+                         self.supabase.table("job_run").update({"requires_approval": False}).eq("job_id", job_id).execute()
+                         current_plan_id = plan_id
+                    else:
+                        # Update status to planning_ready for UI feedback
+                        self._update_job_status(job_id, "planning_ready")
+                        return True # Stop here, wait for UI
+                except Exception as plan_e:
+                    error_msg = f"Planning stage failed: {str(plan_e)}"
+                    detailed_error = traceback.format_exc()
+                    print(f"\n[PIPELINE] ❌ {error_msg}", flush=True)
+                    print(detailed_error, flush=True)
+                    self._update_job_status(job_id, "ERROR", error_msg, detailed_error)
+                    return False
             
             # Case B: Plan Exists. Check Status.
             plan_res = self.supabase.table("job_plan").select("status").eq("plan_id", current_plan_id).single().execute()
             plan_status = plan_res.data.get("status")
             
             if plan_status != JobPlanStatus.APPROVED:
-                print(f"[PIPELINE v3] Plan {current_plan_id} is {plan_status}. Waiting for approval.")
+                print(f"[PIPELINE v3] Plan {current_plan_id} is {plan_status}. Waiting for approval.", flush=True)
                 return True # Stop here
                 
             # Case C: Plan Approved -> Execute
@@ -147,13 +167,25 @@ class PipelineOrchestrator:
             
         except Exception as e:
             error_msg = f"Pipeline failed for job {job_id}: {str(e)}"
-            print(f"[PIPELINE] {error_msg}")
-            traceback.print_exc()
-            self._update_job_status(job_id, "ERROR", error_msg)
+            detailed_error = traceback.format_exc()
+            print(detailed_error, flush=True)
+            
+            # --- DEBUG: WRITE CRASH TO FILE ---
+            try:
+                with open("CRASH_LOG.txt", "w", encoding="utf-8") as f:
+                    f.write(detailed_error)
+            except: pass
+            # ----------------------------------
+            
+            self._update_job_status(job_id, "ERROR", error_msg, detailed_error)
             return False
 
     def _execute_plan(self, job_id: str, plan_id: str, root_path: str) -> bool:
         """Executes the approved items in the plan"""
+        
+        # Fetch project_id for later use (Reasoning/Artifacts)
+        job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+        project_id = job_res.data.get("project_id")
         
         # Fetch items ordered by Area and Order Index
         # We need to join with Area to sort by Area Order, but supabase-py join is tricky.
@@ -168,22 +200,20 @@ class PipelineOrchestrator:
         items.sort(key=lambda x: (area_order_map.get(x["area_id"], 999), x["order_index"]))
         
         if settings.DEBUG_MAX_ITEMS > 0:
-            print(f"[PIPELINE v3] DEBUG MODE: Limiting execution to top {settings.DEBUG_MAX_ITEMS} items.")
+            print(f"[PIPELINE v3] DEBUG MODE: Limiting execution to top {settings.DEBUG_MAX_ITEMS} items.", flush=True)
             items = items[:settings.DEBUG_MAX_ITEMS]
             
         total_items = len(items)
-        print(f"[PIPELINE v3] Executing {total_items} items from plan.")
+        print(f"[PIPELINE v3] Executing {total_items} items from plan.", flush=True)
         
         file_results = []
         
         for i, item in enumerate(items):
-            print(f"!!! LOOP TRACE: Processing {i+1}/{total_items}: {item['path']}")
+            progress = int(((i) / total_items) * 100)
+            print(f"!!! LOOP TRACE: Processing {i+1}/{total_items} ({progress}%): {item['path']}", flush=True)
             
             # Update Job Progress (Current Item)
-            self.supabase.table("job_run").update({
-                "current_item_id": item["item_id"],
-                "progress_pct": int(((i) / total_items) * 100)
-            }).eq("job_id", job_id).execute()
+            self._update_job_progress(job_id, f"processing: {os.path.basename(item['path'])}", progress)
             
             # Read Content
             full_path = os.path.join(root_path, item["path"])
@@ -239,7 +269,32 @@ class PipelineOrchestrator:
             "current_item_id": None
         }).eq("job_id", job_id).execute()
         
-        print(f"[PIPELINE v3] Execution Completed.")
+        # --- v5.0 ACCURACY AUDIT ---
+        print(f"[PIPELINE v5.0] Running Post-Processing Accuracy Audit...")
+        self._run_post_processing_audit(job_id)
+
+        # --- v6.2 REASONING SYNTHESIS ---
+        print(f"[PIPELINE v6.2] Running Reasoning Synthesis...", flush=True)
+        try:
+            import asyncio
+            # Since _execute_plan is sync, we use a controlled async run
+            if project_id:
+                asyncio.run(self.reasoning.synthesize_global_conclusion(job_id, project_id))
+        except Exception as re_e:
+            print(f"[PIPELINE v6.2] ERROR in Reasoning Synthesis: {re_e}", flush=True)
+            traceback.print_exc()
+
+        # --- v6.3 AUTOMATED ARTIFACT GENERATION ---
+        print(f"[PIPELINE v6.3] Generating Automated Reports & Artifacts...", flush=True)
+        try:
+            import asyncio
+            if project_id:
+                asyncio.run(self.reports.generate_and_save_latest_artifacts(project_id))
+        except Exception as art_e:
+            print(f"[PIPELINE v6.3] ERROR in Artifact Generation: {art_e}", flush=True)
+            traceback.print_exc()
+
+        print(f"[PIPELINE v3] Execution Completed.", flush=True)
         print(f"[PIPELINE] Metrics: {self._get_metrics_summary()}")
         return True
 
@@ -440,8 +495,14 @@ class PipelineOrchestrator:
                 
                 # --- ASSET RESOLUTION ---
                 # Resolve names into UUIDs from the macro extraction
-                src_search = l.get("source_asset_id")
-                tgt_search = l.get("target_asset_id")
+                src_search = l.get("source_asset_id") or l.get("source_asset_name")
+                tgt_search = l.get("target_asset_id") or l.get("target_asset_name")
+                
+                # Heuristic: If name is missing but column has dot notation, try to parse table name
+                if not src_search and l.get("source_column") and "." in l.get("source_column"):
+                    src_search = l.get("source_column").split(".")[0]
+                if not tgt_search and l.get("target_column") and "." in l.get("target_column"):
+                    tgt_search = l.get("target_column").split(".")[0]
                 
                 # Resolution logic: Check ID map then Name map
                 resolved_src = id_name_map.get(src_search) or name_map.get(src_search)
@@ -611,17 +672,27 @@ class PipelineOrchestrator:
         # let's keep it if we need to sync graphs or something else at high level.
         pass
 
-    def _update_job_progress(self, job_id: str, stage: str):
+    def _update_job_progress(self, job_id: str, stage: str, pct: int = None):
         try:
-            self.supabase.table("job_run").update({"current_stage": stage}).eq("job_id", job_id).execute()
-        except: pass
-
-    def _update_job_status(self, job_id: str, status: str, msg: str = None):
-        data = {"status": status}
-        if msg: data["error_message"] = msg
-        try:
+            data = {"current_stage": stage}
+            if pct is not None:
+                data["progress_pct"] = pct
             self.supabase.table("job_run").update(data).eq("job_id", job_id).execute()
         except: pass
+
+    def _update_job_status(self, job_id: str, status: str, msg: str = None, dtl: str = None):
+        data = {"status": status}
+        if msg: 
+            data["error_message"] = msg
+        if dtl:
+            data["error_details"] = dtl
+        elif msg:
+            data["error_details"] = msg # Fallback if no specific dtl
+
+        try:
+            self.supabase.table("job_run").update(data).eq("job_id", job_id).execute()
+        except Exception as e:
+            print(f"[PIPELINE ERROR] Failed to update job status: {e}", flush=True)
 
     def _create_success_result(self, file_path, strategy, res, start_time):
         return ProcessingResult(True, file_path, strategy, "extraction", data=res.data, processing_time_ms=int((time.time()-start_time)*1000))
@@ -674,7 +745,30 @@ class PipelineOrchestrator:
                         graph_svc.upsert_relationship(source_props, target_props, rel_type)
             
             print(f"[PIPELINE] Graph Sync Completed.")
-            
         except Exception as e:
             print(f"[PIPELINE ERROR] Graph Sync Failed: {e}")
+            traceback.print_exc()
+
+    def _run_post_processing_audit(self, job_id: str):
+        """
+        Calculates accuracy metrics and generates improvement recommendations.
+        """
+        try:
+            # 1. Fetch project_id
+            job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+            project_id = job_res.data.get("project_id")
+            
+            # 2. Run Audit & Refinement
+            report = self.refiner.generate_recommendations(project_id)
+            
+            # 3. Persist Audit Result to job_run and audit_snapshot table
+            print(f"[AUDITOR] Audit completed for project {project_id}")
+            print(f"  - Coverage: {report['audit']['metrics']['coverage_score']}%")
+            print(f"  - AI Suggestions: {len(report['ai_suggestions'])} found.")
+            
+            # Save Persistent Snapshot
+            self.auditor.save_snapshot(job_id, report['audit'])
+            
+        except Exception as e:
+            print(f"[AUDITOR ERROR] Audit failed: {e}")
             traceback.print_exc()

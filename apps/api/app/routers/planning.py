@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 from supabase import Client, create_client
 from ..config import settings
@@ -35,13 +36,14 @@ async def create_plan(solution_id: str, request: CreatePlanRequest, supabase: Cl
     
     planner = PlannerService(supabase)
     try:
-        plan_id = planner.create_plan(request.job_id, file_path, request.mode)
+        loop = asyncio.get_running_loop()
+        plan_id = await loop.run_in_executor(None, planner.create_plan, request.job_id, file_path, request.mode)
         return {"plan_id": plan_id, "status": "planning_ready"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/plans/{plan_id}")
-async def get_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
+def get_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     """
     Returns the full plan hierarchy.
     """
@@ -73,7 +75,7 @@ async def get_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     return plan
 
 @router.patch("/plans/{plan_id}/items/{item_id}")
-async def update_plan_item(plan_id: str, item_id: str, update: UpdatePlanItemRequest, supabase: Client = Depends(get_supabase)):
+def update_plan_item(plan_id: str, item_id: str, update: UpdatePlanItemRequest, supabase: Client = Depends(get_supabase)):
     """
     Update item status (enabled/disabled), order, or area.
     """
@@ -92,7 +94,7 @@ async def update_plan_item(plan_id: str, item_id: str, update: UpdatePlanItemReq
     return res.data
 
 @router.post("/plans/{plan_id}/approve")
-async def approve_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
+def approve_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     """
     Approves the plan and triggers execution.
     """
@@ -105,10 +107,15 @@ async def approve_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     job_id = plan_res.data["job_id"]
     
     # Update Job
-    supabase.table("job_run").update({
+    job_update_res = supabase.table("job_run").update({
         "status": "queued", 
         "requires_approval": False # Flag handled
     }).eq("job_id", job_id).execute()
+    
+    # Update Solution status to PROCESSING
+    if job_update_res.data:
+        project_id = job_update_res.data[0]["project_id"]
+        supabase.table("solutions").update({"status": "PROCESSING"}).eq("id", project_id).execute()
     
     # 3. Enqueue for Worker
     queue = SQLJobQueue()
@@ -116,7 +123,7 @@ async def approve_plan(plan_id: str, supabase: Client = Depends(get_supabase)):
     
     return {"status": "approved", "job_id": job_id}
 @router.get("/solutions/{solution_id}/active-plan")
-async def get_active_plan(solution_id: str, supabase: Client = Depends(get_supabase)):
+def get_active_plan(solution_id: str, supabase: Client = Depends(get_supabase)):
     """
     Optimized endpoint that returns the active job and its full plan in one call.
     """

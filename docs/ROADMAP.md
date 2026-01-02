@@ -1,17 +1,17 @@
 # DiscoverAI - Roadmap & Release Strategy
 
-## ✅ Released: v4.0 "High-Fidelity Core"
-The full base version of DiscoverAI.
-- [x] **Hierarchical Prompting**: 4-layer intelligence (Base, Domain, Org, Solution).
-- [x] **Structural Parsers**: Accurate native parsing for SSIS (.dtsx) and DataStage (.dsx).
-- [x] **Governance Gateway**: Manual export system for Purview, Unity Catalog, and dbt.
-- [x] **Integrated Documentation**: Contextual 'Guide' panels in Prompt Manager and Model Config.
-- [x] **LLM Resilience**: Automated retry system for 429 errors.
+## ✅ Released: v6.0 "Immersive Intelligence"
+La versión de cierre para el ciclo "Reasoning & Governance".
+- [x] **Optimization Auditor**: Detección de brechas y auto-parcheo de prompts.
+- [x] **Master Synthesis**: Reportes técnicos profesionales (PDF/MD) autogenerados.
+- [x] **Governance Gateways**: Purview, Unity Catalog y dbt support.
+- [x] **Hi-Fi Parsers**: Soporte nativo SSIS, DataStage y dbt.
+- [x] **LLM Resilience**: Sistema robusto de reintentos y backoff.
 
 ---
 
-## 🚀 Incoming: v5.0 "Ecosystem & Experience"
-Focusing on seamless ingestion, automated syncs, and premium UI.
+## 🚀 Incoming: v7.0 "Deep Insight & Scale"
+Enfocado en granularidad, integraciones nativas y escala masiva.
 
 ### 1. Ingestion & Automated Governance
 - [ ] **dbt Manifest Ingestion**: Read `manifest.json` to overlay existing dbt documentation on technical lineage.

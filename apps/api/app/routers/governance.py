@@ -8,7 +8,7 @@ import io
 router = APIRouter(prefix="/admin/governance", tags=["governance"])
 
 @router.get("/export/{project_id}/purview")
-async def export_purview(project_id: str, supabase: Client = Depends(get_supabase)):
+def export_purview(project_id: str, supabase: Client = Depends(get_supabase)):
     service = GovernanceExportService(supabase)
     csv_content = service.export_for_purview(project_id)
     return Response(
@@ -18,7 +18,7 @@ async def export_purview(project_id: str, supabase: Client = Depends(get_supabas
     )
 
 @router.get("/export/{project_id}/unity-catalog")
-async def export_unity_catalog(project_id: str, supabase: Client = Depends(get_supabase)):
+def export_unity_catalog(project_id: str, supabase: Client = Depends(get_supabase)):
     service = GovernanceExportService(supabase)
     csv_content = service.export_for_unity_catalog(project_id)
     return Response(
@@ -28,7 +28,7 @@ async def export_unity_catalog(project_id: str, supabase: Client = Depends(get_s
     )
 
 @router.get("/export/{project_id}/dbt")
-async def export_dbt(project_id: str, supabase: Client = Depends(get_supabase)):
+def export_dbt(project_id: str, supabase: Client = Depends(get_supabase)):
     service = GovernanceExportService(supabase)
     yml_content = service.export_for_dbt(project_id)
     return Response(
@@ -38,7 +38,7 @@ async def export_dbt(project_id: str, supabase: Client = Depends(get_supabase)):
     )
 
 @router.get("/export/{project_id}/raw")
-async def export_raw(project_id: str, supabase: Client = Depends(get_supabase)):
+def export_raw(project_id: str, supabase: Client = Depends(get_supabase)):
     service = GovernanceExportService(supabase)
     json_content = service.export_raw_json(project_id)
     return Response(

@@ -36,14 +36,21 @@ To minimize LLM hallucinations, v4.0 introduced native structural parsing:
     - **Prompt Matrix UI**: A professional dashboard to manage global and solution-specific layers.
     - Verification of "Northwind Normalization" where multiple connection strings are consolidated via the Solution Layer.
 
-### Sprint 3: Governance Hub & Final Stabilization
-- **Goal**: Externalize findings and stabilize the v4.0 core.
+### Sprint 3: Governance Hub & Synthesis
+- **Goal**: Externalize findings and build professional artifacts.
 - **Key Deliverables**:
-    - **GovernanceExportService**: platform-specific exports for **Microsoft Purview** (CSV), **Unity Catalog** (CSV), and **dbt** (`sources.yml`).
-    - Final worker refactor for robustness and state-based progression.
-    - Removal of legacy prompt files and archival of v3.0 logic.
+    - **GovernanceExportService**: platform-specific exports for **Purview**, **Unity Catalog**, and **dbt**.
+    - **ReportService**: Automated generation of technical snapshots (PDF/Markdown).
+    - **Interactive Chat**: Assistant integration for solution exploration.
+
+### Sprint 4: Agentic Optimization (v6.0 Close)
+- **Goal**: Close the loop between discovery and continuous refinement.
+- **Key Deliverables**:
+    - **Optimization Auditor**: Implementation of the gap detection and prompt patching cycle.
+    - **UUID & Structure Stabilization**: Critical fixes to the auditor's persistence layer for production durability.
+    - **Immersive Dashboard**: Full UI integration of the optimization report and health metrics.
 
 ---
 
 ## 🏁 Milestone Completion
-DiscoverAI v4.0 is now the stable base for all subsequent "Agentic" features. It provides the high-fidelity extraction and contextual flexibility required for enterprise-grade data discovery.
+DiscoverAI v6.0 marks the completion of the "Intelligence & Governance" cycle. The platform is now a resilient, reasoning-capable engine ready for enterprise ingestion and automated modernization planning.

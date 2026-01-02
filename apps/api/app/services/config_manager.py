@@ -77,14 +77,26 @@ class ConfigManager:
         }
 
     def list_available_configs(self) -> Dict[str, Any]:
-        """Lists all providers and routings available in the system."""
+        """Lists all providers and enriched routings available in the system."""
         providers = []
         for p in (self.config_root / "providers").glob("*.yml"):
             providers.append(f"providers/{p.name}")
             
         routings = []
         for r in (self.config_root / "routings").glob("*.yml"):
-            routings.append(f"routings/{r.name}")
+            rel_path = f"routings/{r.name}"
+            try:
+                # Enforce 1:N mapping by reading the routing's provider
+                with open(r, 'r', encoding='utf-8') as f:
+                    data = yaml.safe_load(f)
+                    routings.append({
+                        "path": rel_path,
+                        "name": data.get("name", r.name),
+                        "provider": data.get("provider", "Unknown")
+                    })
+            except Exception as e:
+                logger.error(f"Failed to parse routing {r}: {e}")
+                routings.append({"path": rel_path, "name": r.name, "provider": "Unknown"})
             
         return {
             "providers": providers,
@@ -111,5 +123,47 @@ class ConfigManager:
             yaml.safe_dump(new_active, f)
             
         # Clear cache
+        self._provider_cache = {}
+        self._routing_cache = {}
+    def _secure_path(self, rel_path: str) -> Path:
+        """Ensures the path is within the config root and allowed subdirs."""
+        full_path = (self.config_root / rel_path).resolve()
+        root_path = self.config_root.resolve()
+        
+        # Security: Prevent path traversal
+        if not str(full_path).startswith(str(root_path)):
+            raise PermissionError("Access denied: Path is outside configuration root.")
+            
+        # Only allow access to providers/ or routings/ subdirs
+        rel_to_root = full_path.relative_to(root_path)
+        parts = rel_to_root.parts
+        if not parts or parts[0] not in ["providers", "routings"]:
+            raise PermissionError("Access denied: Only provider or routing files can be modified.")
+            
+        return full_path
+
+    def read_config_file(self, rel_path: str) -> str:
+        """Reads the raw content of a configuration file."""
+        path = self._secure_path(rel_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Config file not found: {rel_path}")
+            
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def write_config_file(self, rel_path: str, content: str):
+        """Writes raw content to a configuration file."""
+        path = self._secure_path(rel_path)
+        
+        # Verify valid YAML before saving
+        try:
+            yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML content: {str(e)}")
+            
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        # Clear cache to ensure changes are picked up
         self._provider_cache = {}
         self._routing_cache = {}

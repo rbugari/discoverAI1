@@ -1,37 +1,50 @@
-name: "Economy Mode (Ultra Low Cost)"
+name: Economy Mode (Ultra Low Cost)
 provider: providers/groq.yml
-
 actions:
   planner.classifier:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.1
-    
   extract.schema:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.0
-    
   extract.lineage.package:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.0
-    
   extract.lineage.sql:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.0
-    
   summarize.asset:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.2
-    
   qa.chat:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.5
-
   generate.dbt:
-    model: "llama-3.1-8b-instant"
+    model: llama-3.1-8b-instant
     temperature: 0.0
-
   extract.deep_dive:
-    model: "llama-3.3-70b-versatile"
-    prompt_file: "prompts/extract_deep_dive.md"
+    model: llama-3.3-70b-versatile
+    prompt_file: prompts/extract_deep_dive.md
     temperature: 0.0
     max_tokens: 8000
+  extract.python:
+    model: llama-3.1-8b-instant
+    temperature: 0.1
+    max_tokens: 4096
+  extract.strict:
+    model: llama-3.1-8b-instant
+    temperature: 0.1
+    max_tokens: 4096
+  reasoning.architect:
+    model: llama-3.3-70b-versatile
+    temperature: 0.3
+    max_tokens: 2000
+  expert.report:
+    model: llama-3.3-70b-versatile
+    temperature: 0.3
+    max_tokens: 2000
+  action.analyze_iteration:
+    model: allenai/olmo-3.1-32b-think:free
+    provider: openrouter
+    temperature: 0.3
+    max_tokens: 2000

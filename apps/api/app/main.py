@@ -35,10 +35,10 @@ def read_root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "file": __file__}
 
 @app.post("/jobs")
-async def create_job(job: JobRequest):
+def create_job(job: JobRequest):
     from .services.queue import SQLJobQueue
     from supabase import create_client
     from .config import settings
@@ -95,7 +95,7 @@ class ChatRequest(BaseModel):
     question: str
 
 @app.post("/solutions/{solution_id}/chat")
-async def chat_solution(solution_id: str, request: ChatRequest):
+def chat_solution(solution_id: str, request: ChatRequest):
     from .services.graph import get_graph_service
     from .services.llm import LLMService
     
@@ -109,60 +109,73 @@ async def chat_solution(solution_id: str, request: ChatRequest):
     
     return {"answer": answer}
 
+@app.post("/solutions/{solution_id}/optimize")
+async def optimize_solution(solution_id: str):
+    """
+    AI-driven gap analysis and prompt refinement.
+    Moved to main.py to ensure correct route priority.
+    """
+    from .services.auditor import DiscoveryAuditor
+    from .services.refiner import DiscoveryRefiner
+    from .actions import ActionRunner
+    from .routers.solutions import get_supabase
+    
+    supabase = get_supabase()
+    auditor = DiscoveryAuditor(supabase)
+    runner = ActionRunner()
+    refiner = DiscoveryRefiner(auditor, runner)
+    
+    # 1. Generate Recommendations
+    print(f"[API] Running AI Optimization for solution {solution_id}...", flush=True)
+    report = refiner.generate_recommendations(solution_id)
+    
+    # 2. Save snapshot (fetch latest job_id to avoid UUID type mismatch)
+    job_res = supabase.table("job_run").select("job_id").eq("project_id", solution_id).order("created_at", desc=True).limit(1).execute()
+    latest_job_id = job_res.data[0]["job_id"] if job_res.data else None
+    
+    snapshot_id = auditor.save_snapshot(latest_job_id, report["audit"])
+    
+    return {
+        "status": "success",
+        "snapshot_id": snapshot_id,
+        "recommendations": report.get("ai_suggestions", []),
+        "patch": report.get("suggested_solution_layer", ""),
+        "next_action": report.get("next_best_action", "")
+    }
+
 @app.options("/solutions/{solution_id}/chat")
 async def chat_solution_options(solution_id: str):
     return {}
 
 @app.delete("/solutions/{solution_id}")
-async def delete_solution(solution_id: str):
+def delete_solution(solution_id: str):
+    from .services.reset_service import NuclearResetService
+    from .services.graph import get_graph_service
     from supabase import create_client
     from .config import settings
-    from .services.graph import get_graph_service
     
-    # Use Service Role Key if available to bypass RLS, otherwise fallback to Anon Key
-    key_to_use = settings.SUPABASE_SERVICE_ROLE_KEY if settings.SUPABASE_SERVICE_ROLE_KEY else settings.SUPABASE_KEY
+    key_to_use = settings.SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_KEY
     supabase = create_client(settings.SUPABASE_URL, key_to_use)
+    reset_service = NuclearResetService(supabase)
     
     try:
-        # Delete from Supabase
-        print(f"Attempting to delete solution {solution_id} from Supabase...")
+        # 1. Nuclear Reset (Brain, Sandbox, Lineage)
+        reset_service.reset_solution_data(solution_id)
         
-        # 1. Clean Assets (Manual Cascade)
-        # Step 1: Delete Job Runs (they link to project_id)
-        job_del = supabase.table("job_run").delete().eq("project_id", solution_id).execute()
-        print(f"Deleted Job Runs: {len(job_del.data)}")
-        
-        # Step 2: Delete Edges (they link to project_id)
-        # Note: edge_evidence might be orphaned if not cascaded.
-        edge_del = supabase.table("edge_index").delete().eq("project_id", solution_id).execute()
-        print(f"Deleted Edges: {len(edge_del.data)}")
-        
-        # Step 3: Delete Assets (they link to project_id)
-        asset_del = supabase.table("asset").delete().eq("project_id", solution_id).execute()
-        print(f"Deleted Assets: {len(asset_del.data)}")
-        
-        # Step 3.5: Delete Evidence (often overlooked, links to project_id)
-        evidence_del = supabase.table("evidence").delete().eq("project_id", solution_id).execute()
-        print(f"Deleted Evidence: {len(evidence_del.data)}")
-        
-        # Step 4: Delete Solution
-        res = supabase.from_("solutions").delete().eq("id", solution_id).execute()
-        print(f"Supabase Solution Delete Result: {res}")
-        
-        # Check if anything was actually deleted
-        if not res.data:
-            print(f"WARNING: Solution {solution_id} was NOT deleted (RLS or ID not found).")
-        
-        # Delete from Neo4j
+        # 2. Neo4j cleanup
         try:
             graph_service = get_graph_service()
             graph_service.delete_solution_nodes(solution_id)
         except Exception as graph_e:
             print(f"Failed to delete graph nodes: {graph_e}")
 
+        # 3. Final removal from 'solutions' table
+        res = supabase.from_("solutions").delete().eq("id", solution_id).execute()
+        
         return {"status": "deleted", "id": solution_id}
     except Exception as e:
         print(f"Delete Exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         # Return success even if failed, to allow UI to update? No, better return 500 so user knows.
         # But if it's partial failure (e.g. Neo4j down), we might want to return 200 with warning.
         raise HTTPException(status_code=500, detail=str(e))
@@ -181,7 +194,7 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
     # Check if full cleanup requested
     if request.mode == "full":
         try:
-            print(f"Cleaning previous data for solution {solution_id} (Full Reprocess)...")
+            print(f"Cleaning previous data for solution {solution_id} (Full Reprocess)...", flush=True)
             
             # 1. Fetch all job_ids for this project to clean logs and plans
             jobs_res = supabase.table("job_run").select("job_id").eq("project_id", solution_id).execute()
@@ -251,8 +264,8 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
         res = supabase.table("job_run").insert(job_data).execute()
         new_job_id = res.data[0]["job_id"]
         
-        # Update Solution Status to QUEUED
-        supabase.table("solutions").update({"status": "QUEUED"}).eq("id", solution_id).execute()
+        # Update Solution Status to PROCESSING
+        supabase.table("solutions").update({"status": "PROCESSING"}).eq("id", solution_id).execute()
         
         # Enqueue
         queue = SQLJobQueue()
@@ -348,6 +361,18 @@ async def get_solution_stats(solution_id: str):
     if last_run_res.data:
         last_run = last_run_res.data[0]["finished_at"]
 
+    # Latest Audit Report (v5.0 Integration)
+    audit_report = None
+    audit_res = supabase.table("audit_snapshot")\
+        .select("*")\
+        .eq("project_id", solution_id)\
+        .order("created_at", desc=True)\
+        .limit(1)\
+        .execute()
+    
+    if audit_res.data:
+        audit_report = audit_res.data[0]
+
     return {
         "total_assets": assets_count.count,
         "total_edges": edges_count.count,
@@ -355,7 +380,9 @@ async def get_solution_stats(solution_id: str):
         "tables": tables_count.count,
         "pipelines": pipelines_count.count,
         "active_job": job_status,
-        "last_run": last_run
+        "last_run": last_run,
+        "audit_report": audit_report,
+        "metrics": audit_report["metrics"] if audit_report else None
     }
 
 @app.get("/solutions/{solution_id}/assets")

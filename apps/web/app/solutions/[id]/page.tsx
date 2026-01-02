@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, RefreshCw, X, FileText, Database, Table, Download, ArrowRightLeft, LayoutGrid, Network, Filter, Settings, Map, ArrowDown, ArrowRight, Focus, Minimize2, CircleDot, Share2 } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, X, FileText, Database, Table, Download, ArrowRightLeft, LayoutGrid, Network, Filter, Settings, Map, ArrowDown, ArrowRight, Focus, Minimize2, CircleDot, ShieldCheck, BarChart3 } from 'lucide-react';
 import ReactFlow, {
     Node,
     Edge,
@@ -16,7 +16,8 @@ import ReactFlow, {
     MarkerType,
     useReactFlow,
     ReactFlowProvider,
-    MiniMap
+    MiniMap,
+    Position
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import axios from 'axios';
@@ -26,6 +27,7 @@ import CatalogPage from './catalog/page';
 import PackagesView from './PackagesView';
 import LineageView from './LineageView';
 import GovernanceView from './GovernanceView';
+import SolutionDashboard from './SolutionDashboard';
 import { ModeToggle } from '@/components/mode-toggle';
 
 interface PageProps {
@@ -95,8 +97,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
     const layoutedNodes = nodes.map((node) => {
         const nodeWithPosition = dagreGraph.node(node.id);
-        node.targetPosition = direction === 'LR' ? 'left' : 'top';
-        node.sourcePosition = direction === 'LR' ? 'right' : 'bottom';
+        node.targetPosition = direction === 'LR' ? Position.Left : Position.Top;
+        node.sourcePosition = direction === 'LR' ? Position.Right : Position.Bottom;
 
         // We are shifting the dagre node position (anchor=center center) to the top left
         // so it matches the React Flow node anchor point (top left).
@@ -674,11 +676,12 @@ export default function SolutionDetailPage({ params }: PageProps) {
     const [solution, setSolution] = useState<any>(null);
     const [activeJob, setActiveJob] = useState<any>(null); // New state for active job
     const [loading, setLoading] = useState(true);
-    const [viewMode, setViewMode] = useState<'graph' | 'catalog' | 'packages' | 'lineage' | 'governance'>(
+    const [viewMode, setViewMode] = useState<'dashboard' | 'graph' | 'catalog' | 'packages' | 'lineage' | 'governance'>(
         queryView === 'catalog' ? 'catalog' :
             queryView === 'packages' ? 'packages' :
                 queryView === 'lineage' ? 'lineage' :
-                    queryView === 'governance' ? 'governance' : 'graph'
+                    queryView === 'governance' ? 'governance' :
+                        queryView === 'graph' ? 'graph' : 'dashboard'
     );
     const router = useRouter(); // For navigation
 
@@ -717,18 +720,26 @@ export default function SolutionDetailPage({ params }: PageProps) {
         setLoading(false);
     }, [id]);
 
+    // Polling for status updates ONLY if in a transient state
     useEffect(() => {
         fetchSolution();
 
-        // Polling for status updates if processing or planning
+        // Polling for status updates ONLY if in a transient state
         const interval = setInterval(() => {
-            if (solution?.status === 'PROCESSING' || activeJob?.status === 'planning_ready') {
+            const status = solution?.status;
+            const jobStatus = activeJob?.status;
+
+            const isProcessing = status === 'PROCESSING' || status === 'QUEUED';
+            const jobInProgress = activeJob && ['queued', 'running', 'planning_ready'].includes(jobStatus);
+
+            if (isProcessing || jobInProgress) {
+                console.log("[POLLING] Refreshing solution state...");
                 fetchSolution();
             }
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [fetchSolution, solution?.status, activeJob?.status]);
+    }, [fetchSolution, id, solution?.status, activeJob?.status]);
 
     if (loading) {
         return (
@@ -833,6 +844,12 @@ export default function SolutionDetailPage({ params }: PageProps) {
                     <ModeToggle />
                     <div className="flex bg-muted p-1 rounded-md">
                         <button
+                            onClick={() => setViewMode('dashboard')}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'dashboard' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            <BarChart3 size={16} /> Summary
+                        </button>
+                        <button
                             onClick={() => setViewMode('graph')}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'graph' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                         >
@@ -860,14 +877,18 @@ export default function SolutionDetailPage({ params }: PageProps) {
                             onClick={() => setViewMode('governance')}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-all ${viewMode === 'governance' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                         >
-                            <Share2 size={16} /> Integrations
+                            <ShieldCheck size={16} /> Governance
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Content */}
-            {viewMode === 'graph' ? (
+            {viewMode === 'dashboard' ? (
+                <div className="flex-1 overflow-y-auto bg-zinc-50 dark:bg-black p-4 lg:p-10">
+                    <SolutionDashboard id={id} solution={solution} />
+                </div>
+            ) : viewMode === 'graph' ? (
                 <ReactFlowProvider>
                     <GraphContent id={id} solution={solution} />
                 </ReactFlowProvider>

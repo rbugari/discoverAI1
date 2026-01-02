@@ -6,12 +6,14 @@ import { supabase } from '@/lib/supabase';
 import { Plus, Loader2, Trash2, RefreshCw, Settings, Network, LayoutGrid, FileCode } from 'lucide-react';
 import axios from 'axios';
 import { ModeToggle } from '@/components/mode-toggle';
+import { SolutionCard } from '@/components/SolutionCard';
 
 interface Solution {
   id: string;
   name: string;
   status: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export default function DashboardPage() {
@@ -122,32 +124,45 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-4">
-            <LayoutGrid className="text-primary" size={32} />
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Your Solutions</h1>
-              <p className="text-muted-foreground">Manage and explore your data lineage projects</p>
-            </div>
+    <div className="p-6 lg:pl-4 lg:pr-12 lg:py-12 min-h-screen relative overflow-hidden bg-background">
+      {/* Extreme Premium Background Decorative Elements */}
+      {/* v6.0 Human-First Decorative Elements */}
+      <div className="absolute -top-32 -left-32 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[160px] pointer-events-none animate-pulse" />
+      <div className="absolute top-[20%] -right-32 w-[500px] h-[500px] bg-orange-500/5 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[10%] left-[10%] w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
+
+      <div className="relative z-10 mb-16 max-w-[1400px]">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+          <div className="space-y-4">
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary block">
+              Intelligence Command Center
+            </span>
+            <h1 className="text-5xl lg:text-6xl font-black tracking-tight leading-[0.9]">
+              Your <span className="text-primary italic">Solutions</span>
+            </h1>
+            <p className="text-base lg:text-lg font-bold text-muted-foreground/60 max-w-2xl leading-relaxed">
+              Discover, audit, and optimize your enterprise data lineage with human-centric AI reasoning.
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 border-r pr-4 mr-2 border-border">
-              <Link href="/admin/model-config" className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary rounded-lg transition-all" title="Model Configuration">
-                <Settings size={20} />
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 p-2 glass rounded-2xl border-primary/10 bg-white/5">
+              <Link href="/admin/model-config" className="p-3 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-all" title="Model Configuration">
+                <Settings size={22} />
               </Link>
-              <Link href="/admin/prompts" className="p-2 text-muted-foreground hover:text-primary hover:bg-secondary rounded-lg transition-all" title="Prompts & Agents">
-                <FileCode size={20} />
+              <Link href="/admin/prompts" className="p-3 text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-xl transition-all" title="Prompts & Agents">
+                <FileCode size={22} />
               </Link>
             </div>
+            <div className="h-12 w-[1px] bg-border mx-2" />
             <ModeToggle />
             <Link
               href="/solutions/new"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-semibold hover:bg-primary/90 transition-all flex items-center gap-2"
+              className="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-[0_20px_40px_-10px_rgba(249,115,22,0.4)] hover:scale-105 transition-transform"
             >
-              <Plus size={18} />
-              New Solution
+              <div className="flex items-center gap-2">
+                <Plus size={20} className="stroke-[3px]" />
+                New Discovery
+              </div>
             </Link>
           </div>
         </div>
@@ -163,152 +178,16 @@ export default function DashboardPage() {
           <p>Create your first solution to start discovering your data lineage.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {solutions.map((sol) => (
-            <div key={sol.id} className="border border-border p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow bg-card text-card-foreground relative group">
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                <div className="relative">
-                  <button
-                    onClick={() => setMenuOpen(menuOpen === sol.id ? null : sol.id)}
-                    disabled={!!processingId}
-                    className="p-1.5 text-muted-foreground hover:text-primary hover:bg-secondary rounded-md transition-colors"
-                    title="Re-analyze Options"
-                  >
-                    <RefreshCw size={16} className={processingId === sol.id ? 'animate-spin' : ''} />
-                  </button>
-
-                  {menuOpen === sol.id && (
-                    <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                      <button
-                        onClick={() => handleReanalyze(sol.id, 'update')}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-muted transition-colors"
-                      >
-                        Incremental Update
-                      </button>
-                      <button
-                        onClick={() => handleReanalyze(sol.id, 'full')}
-                        className="w-full text-left px-4 py-2 text-sm hover:bg-destructive hover:text-destructive-foreground transition-colors border-t border-border"
-                      >
-                        Full Reprocess (Clean)
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => handleDelete(sol.id)}
-                  disabled={!!processingId}
-                  className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-
-              <h2 className="text-xl font-semibold mb-2 tracking-tight">{sol.name}</h2>
-              <div className="flex items-center gap-2 mb-4">
-                {stats[sol.id]?.active_job?.status === 'planning_ready' ? (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800 animate-pulse">
-                    Ready to Approve
-                  </span>
-                ) : (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border
-                    ${sol.status === 'READY' ? 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
-                      sol.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800' :
-                        'bg-secondary text-secondary-foreground border-border'}`}>
-                    {sol.status}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {stats[sol.id]?.last_run ?
-                    new Date(stats[sol.id].last_run).toLocaleString() :
-                    new Date(sol.created_at).toLocaleDateString()}
-                </span>
-              </div>
-
-              {/* Active Job Progress Section */}
-              {/* Force show if there is an active job in planning_ready status OR if solution is processing */}
-              {((sol.status === 'PROCESSING' || sol.status === 'QUEUED') || (stats[sol.id]?.active_job?.status === 'planning_ready')) && stats[sol.id]?.active_job && (
-                <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-100 dark:border-blue-800">
-                  <div className="flex justify-between text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
-                    <span>
-                      {stats[sol.id].active_job.status === 'planning_ready' ? 'Evaluating Plan - Action Required' :
-                        stats[sol.id].active_job.current_stage === 'planning' ? 'Generating Execution Plan...' :
-                          sol.status === 'QUEUED' ? 'Waiting in queue...' : 'Analyzing...'}
-                    </span>
-                    <span>{stats[sol.id].active_job.progress_pct}%</span>
-                  </div>
-
-                  {/* Show Approval Button if Planning Ready */}
-                  {stats[sol.id].active_job.status === 'planning_ready' ? (
-                    <div className="mt-2">
-                      <Link
-                        href={`/solutions/${sol.id}/plan`}
-                        className="w-full block text-center bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 rounded transition-colors"
-                      >
-                        Review Plan
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-1.5 mb-2 overflow-hidden">
-                      <div
-                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${stats[sol.id].active_job.progress_pct}%` }}
-                      ></div>
-                    </div>
-                  )}
-
-
-
-                  {/* Detailed Stats */}
-                  {stats[sol.id].active_job.error_details && stats[sol.id].active_job.error_details.total_files > 0 && (
-                    <div className="text-[10px] text-blue-600/80 dark:text-blue-400/80 truncate font-mono">
-                      {stats[sol.id].active_job.error_details.processed_files}/{stats[sol.id].active_job.error_details.total_files} files
-                      {stats[sol.id].active_job.error_details.current_file && (
-                        <span className="block truncate mt-0.5 opacity-75">
-                          → {stats[sol.id].active_job.error_details.current_file}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Stats Section (Only show if NOT processing to avoid clutter, or show minimal) */}
-              {sol.status === 'READY' && stats[sol.id] && (
-                <div className="mb-4 grid grid-cols-3 gap-2 text-center text-sm">
-                  <div className="bg-muted/50 p-2 rounded border border-border/50">
-                    <div className="font-bold text-foreground">{stats[sol.id].total_assets}</div>
-                    <div className="text-xs text-muted-foreground">Assets</div>
-                  </div>
-                  <div className="bg-muted/50 p-2 rounded border border-border/50">
-                    <div className="font-bold text-foreground">{stats[sol.id].total_edges}</div>
-                    <div className="text-xs text-muted-foreground">Rels</div>
-                  </div>
-                  <div className="bg-muted/50 p-2 rounded border border-border/50">
-                    <div className="font-bold text-foreground">{stats[sol.id].pipelines || 0}</div>
-                    <div className="text-xs text-muted-foreground">Pipelines</div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Link
-                  href={`/solutions/${sol.id}?view=graph`}
-                  className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/80 text-xs font-medium py-2 rounded-md transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Network size={14} className="group-hover:rotate-180 transition-transform duration-700" />
-                  View Graph
-                </Link>
-                <Link
-                  href={`/solutions/${sol.id}?view=catalog`}
-                  className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/80 text-xs font-medium py-2 rounded-md transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <LayoutGrid size={14} />
-                  View Catalog
-                </Link>
-              </div>
-            </div>
+            <SolutionCard
+              key={sol.id}
+              solution={sol}
+              stats={stats[sol.id]}
+              onDelete={handleDelete}
+              onReanalyze={handleReanalyze}
+              processingId={processingId}
+            />
           ))}
         </div>
       )}

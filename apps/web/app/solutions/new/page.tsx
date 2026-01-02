@@ -20,13 +20,13 @@ export default function NewSolutionPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [sourceType, setSourceType] = useState<SourceType>('ZIP');
-  
+
   // ZIP State
   const [file, setFile] = useState<File | null>(null);
-  
+
   // GitHub State
   const [repoUrl, setRepoUrl] = useState('');
-  
+
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'IDLE' | 'UPLOADING' | 'STARTING' | 'DONE'>('IDLE');
 
@@ -94,7 +94,7 @@ export default function NewSolutionPage() {
 
       setStep('DONE');
       router.push('/dashboard');
-      
+
     } catch (error: any) {
       console.error(error);
       alert('Error creating solution: ' + error.message);
@@ -111,102 +111,102 @@ export default function NewSolutionPage() {
         </Link>
         <ModeToggle />
       </div>
-      
-      <h1 className="text-3xl font-bold mb-2">New Solution</h1>
-      <p className="text-gray-600 mb-8">Connect your data sources to start the analysis.</p>
 
-      <form onSubmit={handleSubmit} className="space-y-6 border p-8 rounded-lg bg-white shadow-sm dark:bg-zinc-900 dark:border-zinc-800">
+      <h1 className="text-3xl font-bold mb-2">New Discovery</h1>
+      <p className="text-gray-600 dark:text-gray-400 mb-8 font-medium">Connect your data sources to start the autonomous reasoning phase.</p>
+
+      <form onSubmit={handleSubmit} className="space-y-6 border p-8 rounded-[2rem] bg-card shadow-sm dark:bg-zinc-900/50 dark:border-zinc-800 backdrop-blur-xl">
         <div>
-          <label className="block text-sm font-medium mb-2">Solution Name</label>
-          <input 
-            type="text" 
+          <label className="block text-sm font-black uppercase tracking-widest mb-2 text-muted-foreground">Solution Name</label>
+          <input
+            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full border rounded-md px-3 py-2 outline-none focus:ring-2 focus:ring-black dark:bg-zinc-800 dark:border-zinc-700"
+            className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary dark:bg-zinc-800 dark:border-zinc-700 transition-all font-bold"
             placeholder="e.g. Sales Data Migration"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-4">Source Type</label>
+          <label className="block text-sm font-black uppercase tracking-widest mb-4 text-muted-foreground">Source Type</label>
           <div className="flex gap-4">
             <button
               type="button"
               onClick={() => setSourceType('ZIP')}
               className={cn(
-                "flex-1 p-4 border rounded-lg flex flex-col items-center gap-2 transition-all",
-                sourceType === 'ZIP' 
-                  ? "border-black bg-zinc-50 dark:border-white dark:bg-zinc-800" 
-                  : "border-gray-200 hover:bg-gray-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                "flex-1 p-6 border rounded-2xl flex flex-col items-center gap-2 transition-all",
+                sourceType === 'ZIP'
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-200 hover:bg-gray-50 dark:border-zinc-700 dark:hover:bg-zinc-800 text-muted-foreground"
               )}
             >
-              <Folder size={24} />
-              <span className="font-medium">Upload ZIP</span>
+              <Folder size={28} />
+              <span className="font-black text-xs uppercase tracking-widest">Upload ZIP</span>
             </button>
             <button
               type="button"
               onClick={() => setSourceType('GITHUB')}
               className={cn(
-                "flex-1 p-4 border rounded-lg flex flex-col items-center gap-2 transition-all",
-                sourceType === 'GITHUB' 
-                  ? "border-black bg-zinc-50 dark:border-white dark:bg-zinc-800" 
-                  : "border-gray-200 hover:bg-gray-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                "flex-1 p-6 border rounded-2xl flex flex-col items-center gap-2 transition-all",
+                sourceType === 'GITHUB'
+                  ? "border-primary bg-primary/5 text-primary"
+                  : "border-gray-200 hover:bg-gray-50 dark:border-zinc-700 dark:hover:bg-zinc-800 text-muted-foreground"
               )}
             >
-              <Github size={24} />
-              <span className="font-medium">GitHub Repo</span>
+              <Github size={28} />
+              <span className="font-black text-xs uppercase tracking-widest">GitHub Repo</span>
             </button>
           </div>
         </div>
 
         {sourceType === 'ZIP' ? (
           <div>
-            <label className="block text-sm font-medium mb-2">Source Code (ZIP)</label>
-            <div className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors relative">
-              <input 
-                type="file" 
+            <label className="block text-sm font-black uppercase tracking-widest mb-2 text-muted-foreground">Source Code (ZIP)</label>
+            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center cursor-pointer hover:bg-primary/5 hover:border-primary/50 transition-all relative group">
+              <input
+                type="file"
                 accept=".zip"
                 onChange={(e) => setFile(e.target.files?.[0] || null)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 required={sourceType === 'ZIP'}
               />
               <div className="flex flex-col items-center pointer-events-none">
-                <Upload className="text-gray-400 mb-2" size={32} />
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                <Upload className="text-muted-foreground/40 group-hover:text-primary transition-colors mb-4" size={40} />
+                <p className="text-sm font-bold text-foreground">
                   {file ? file.name : "Click to upload or drag and drop"}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">ZIP files only</p>
+                <p className="text-xs text-muted-foreground mt-2 font-medium">ZIP files only</p>
               </div>
             </div>
           </div>
         ) : (
           <div>
-            <label className="block text-sm font-medium mb-2">Repository URL</label>
-            <input 
-              type="url" 
+            <label className="block text-sm font-black uppercase tracking-widest mb-2 text-muted-foreground">Repository URL</label>
+            <input
+              type="url"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              className="w-full border rounded-md px-3 py-2 outline-none focus:ring-2 focus:ring-black dark:bg-zinc-800 dark:border-zinc-700"
+              className="w-full border rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary dark:bg-zinc-800 dark:border-zinc-700 font-bold"
               placeholder="https://github.com/username/repo"
               required={sourceType === 'GITHUB'}
             />
-            <p className="text-xs text-gray-500 mt-1">Must be a public repository.</p>
+            <p className="text-xs text-muted-foreground mt-2 font-medium uppercase tracking-tighter">Public repositories only.</p>
           </div>
         )}
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={loading}
-          className="w-full bg-black text-white py-2 rounded-md font-medium hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
+          className="w-full bg-primary text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center transition-all hover:scale-[1.01]"
         >
           {loading ? (
             <>
-              <Loader2 className="animate-spin mr-2" size={18} />
-              {step === 'UPLOADING' ? 'Preparing...' : 'Starting Analysis...'}
+              <Loader2 className="animate-spin mr-3" size={20} />
+              {step === 'UPLOADING' ? 'PREPARING ARTIFACTS...' : 'AWAKENING AGENTS...'}
             </>
           ) : (
-            'Start Analysis'
+            'START DISCOVERY'
           )}
         </button>
       </form>

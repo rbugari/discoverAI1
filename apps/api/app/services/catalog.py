@@ -200,3 +200,27 @@ class CatalogService:
             if lin_data.get("target_asset_id"): lin_data["target_asset_id"] = str(lin_data["target_asset_id"])
             
             self.supabase.table("column_lineage").upsert(lin_data).execute()
+
+    def get_solution_context(self, project_id: str) -> dict:
+        """
+        Gathers all relevant context for the Reasoning Agent.
+        """
+        # 1. Assets Summary
+        assets = self.supabase.table("asset").select("asset_type, count").eq("project_id", project_id).execute()
+        
+        # 2. Key Lineage
+        edges = self.supabase.table("edge_index")\
+            .select("edge_type, from_asset_id, to_asset_id, is_hypothesis, confidence")\
+            .eq("project_id", project_id)\
+            .order("confidence", desc=False)\
+            .limit(100)\
+            .execute()
+            
+        # 3. Packages
+        packages = self.supabase.table("package").select("name, type").eq("project_id", project_id).execute()
+        
+        return {
+            "inventory": assets.data,
+            "hotspots": [e for e in edges.data if e["confidence"] < 0.7 or e["is_hypothesis"]],
+            "packages": packages.data
+        }

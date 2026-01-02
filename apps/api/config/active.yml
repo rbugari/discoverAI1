@@ -1,3 +1,3 @@
 active:
   provider: providers/openrouter.yml
-  routing: routings/routing-openrouter-gemini.yml
+  routing: routings/DeepSeek.yml
