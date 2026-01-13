@@ -323,7 +323,7 @@ export default function AdminConfigPage() {
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-8 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setEditingFile(null)} />
 
-          <div className="relative w-full max-w-5xl bg-card border border-white/10 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300">
+          <div className="relative w-full max-w-7xl h-[85vh] bg-card border border-white/10 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
             {/* Modal Header */}
             <div className="p-6 border-b border-border flex items-center justify-between bg-muted/20">
               <div className="flex items-center gap-4">
@@ -359,7 +359,7 @@ export default function AdminConfigPage() {
             {/* Modal Content */}
             <div className="flex-1 overflow-hidden flex flex-col">
               {isEditorLoading ? (
-                <div className="flex-1 flex flex-center h-96">
+                <div className="flex-1 flex items-center justify-center">
                   <Loader2 className="animate-spin text-primary" size={48} />
                 </div>
               ) : (
@@ -401,7 +401,7 @@ export default function AdminConfigPage() {
 
                   <div className="flex-1 relative group bg-slate-950 rounded-2xl border border-white/5 overflow-hidden">
                     <textarea
-                      className="w-full h-full bg-transparent text-orange-200 font-mono text-sm p-8 outline-none resize-none selection:bg-primary/30"
+                      className="w-full h-full bg-transparent text-emerald-400 font-mono text-base p-8 outline-none resize-none selection:bg-primary/30 leading-relaxed custom-scrollbar"
                       value={editorContent}
                       onChange={(e) => setEditorContent(e.target.value)}
                       spellCheck={false}

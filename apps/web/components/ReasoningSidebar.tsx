@@ -41,7 +41,7 @@ export const ReasoningSidebar = () => {
     }, []);
 
     return (
-        <aside className={`fixed left-0 top-0 h-screen bg-background border-r border-primary/5 z-[9999] transition-all duration-500 ease-in-out flex flex-col ${collapsed ? 'w-20' : 'w-72'}`}>
+        <aside className={`sticky top-0 h-screen bg-background border-r border-primary/5 z-[9999] transition-all duration-500 ease-in-out flex flex-col ${collapsed ? 'w-20' : 'w-72'}`}>
             {/* Human Agent Header */}
             <div className={`p-6 flex items-center justify-between transition-all duration-500 ${collapsed ? 'px-4' : 'px-6'}`}>
                 <div className={`flex items-center gap-3 transition-all duration-300 ${collapsed ? 'opacity-0 scale-50 pointer-events-none' : 'opacity-100 scale-100'}`}>
@@ -53,8 +53,8 @@ export const ReasoningSidebar = () => {
                     </div>
                     {!collapsed && (
                         <div className="flex flex-col">
-                            <span className="text-sm font-black tracking-tight text-foreground uppercase">DiscoverAI <span className="text-primary italic">v6.0</span></span>
-                            <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">Sentient Assistant</span>
+                            <span className="text-sm font-black tracking-tight text-foreground uppercase">DiggerAI <span className="text-primary italic">v7.0</span></span>
+                            <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">Autonomous Discovery Agent</span>
                         </div>
                     )}
                 </div>

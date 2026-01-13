@@ -37,7 +37,7 @@ export default function GovernanceView({ solutionId }: GovernanceViewProps) {
       <div className="space-y-1">
         <h2 className="text-2xl font-bold tracking-tight">Governance & Integrations</h2>
         <p className="text-muted-foreground">
-          Connect Nexus with your data stack and export technical lineage.
+          Connect DiggerAI with your data stack and export technical lineage.
         </p>
       </div>
 

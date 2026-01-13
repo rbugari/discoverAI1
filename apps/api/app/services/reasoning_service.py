@@ -50,10 +50,9 @@ class ReasoningService:
                 {"role": "user", "content": system_prompt}
             ]
 
-            # 3. Call High-Tier Reasoner (e.g., Gemini 1.5 Pro via OpenRouter)
-            # Default to the configured model but suggest high-tier
+            # 3. Call High-Tier Reasoner (Preference for Gemini Flash 1.5)
             res = self.llm.call_model(
-                model="google/gemini-2.0-flash-exp:free", # Preference for high-tier reasoning
+                model="google/gemini-2.5-flash-lite", 
                 messages=messages,
                 temperature=0.3, # Slightly more creative for synthesis
                 max_tokens=2500

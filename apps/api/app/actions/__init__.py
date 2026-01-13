@@ -63,6 +63,8 @@ class ActionRunner:
             "qwen/qwen-2.5-coder": 0.001,
             "deepseek/deepseek-chat": 0.002,
             "google/gemini-2.0-flash-thinking": 0.003,
+            "deepseek/deepseek-v3.2": 0.0006, # Estimated for V3
+            "google/gemini-2.5-flash-lite": 0.00005, # Premium Lite pricing
         }
     
     def run_action(
@@ -138,22 +140,45 @@ class ActionRunner:
             print(f"[ACTION_RUNNER] Executing {model_config.model} (Provider: {model_config.provider})")
             
             # Prepare messages for LLM
-            # Securely truncate input_data (without breaking JSON)
-            # Copy input_data to avoid modifying the original
-            safe_input = input_data.copy()
+            is_diagram = "diagram" in model_config.prompt_file or "diagram" in context.get("file_path", "").lower()
             
-            # Truncate large content BEFORE dumps
-            if "content" in safe_input and isinstance(safe_input["content"], str):
-                if len(safe_input["content"]) > 100000: # Safe limit for large files
-                    print(f"[ACTION_RUNNER] Truncating content from {len(safe_input['content'])} to 100000 chars")
-                    safe_input["content"] = safe_input["content"][:100000] + "... (truncated)"
-            
-            input_json = json.dumps(safe_input)
-            
-            messages = [
-                {"role": "system", "content": prompt_content},
-                {"role": "user", "content": input_json}
-            ]
+            if is_diagram and isinstance(input_data.get("content"), str):
+                file_path = context.get('file_path', '').lower()
+                ext = file_path.split('.')[-1] if '.' in file_path else "jpg"
+                
+                mime_type = "image/jpeg"
+                if ext == "png": mime_type = "image/png"
+                elif ext == "webp": mime_type = "image/webp"
+                elif ext == "gif": mime_type = "image/gif"
+                
+                messages = [
+                    {"role": "system", "content": prompt_content},
+                    {
+                        "role": "user", 
+                        "content": [
+                            {"type": "text", "text": f"Analyze this diagram from file: {context.get('file_path')}. Identify all entities and relationships."},
+                            {
+                                "type": "image_url", 
+                                "image_url": {
+                                    "url": f"data:{mime_type};base64,{input_data['content']}"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            else:
+                # Standard Text format
+                safe_input = input_data.copy()
+                if "content" in safe_input and isinstance(safe_input["content"], str):
+                    if len(safe_input["content"]) > 100000:
+                        safe_input["content"] = safe_input["content"][:100000] + "... (truncated)"
+                
+                input_json = json.dumps(safe_input)
+                
+                messages = [
+                    {"role": "system", "content": prompt_content},
+                    {"role": "user", "content": input_json}
+                ]
             
             # Call LLM
             llm_result = self.llm_service.call_model(
@@ -161,7 +186,8 @@ class ActionRunner:
                 messages=messages,
                 temperature=model_config.temperature,
                 max_tokens=model_config.max_tokens,
-                provider=model_config.provider
+                provider=model_config.provider,
+                json_mode=self._requires_json_validation(model_config.prompt_file)
             )
             
             latency_ms = int((time.time() - start_time) * 1000)
@@ -188,7 +214,7 @@ class ActionRunner:
                     parsed_data = json.loads(cleaned_content)
                     
                     # Validate against specific schema
-                    validation_error = self._validate_json_schema(
+                    validation_error, fixed_data = self._validate_json_schema(
                         parsed_data, 
                         model_config.prompt_file
                     )
@@ -204,7 +230,7 @@ class ActionRunner:
                             latency_ms=latency_ms
                         )
                     
-                    response_data = parsed_data
+                    response_data = fixed_data
                     
                 except json.JSONDecodeError as e:
                     print(f"[ACTION_RUNNER] JSON Decode Error for {model_config.model}: {e}")
@@ -409,37 +435,54 @@ Respond with JSON containing your analysis.
         try:
             # Skip validation for deep_dive as it has a different structure
             if "deep_dive" in prompt_file:
-                return None
+                return None, data
 
             if "extract" in prompt_file:
+                # AUTO-FIX: If model returned a list directly (common in VLM fragments)
+                if isinstance(data, list):
+                    print(f"[ACTION_RUNNER] Auto-mapping list to nodes object for {prompt_file}")
+                    data = {"nodes": data, "edges": []}
+
                 # Ensure nodes and edges exist
                 if "nodes" not in data:
-                    return "Missing 'nodes' field"
+                    return "Missing 'nodes' field", data
                 if "edges" not in data:
-                    return "Missing 'edges' field"
+                    data["edges"] = [] # Default empty edges
                 
                 # Validate node structure
                 if not isinstance(data["nodes"], list):
-                    return "'nodes' must be a list"
+                    return "'nodes' must be a list", data
                 
                 # Validate edge structure
                 if not isinstance(data["edges"], list):
-                    return "'edges' must be a list"
+                    data["edges"] = []
                 
-                # Validate required fields in nodes
+                # Validate required fields in nodes (with AUTO-FIX for 'id' -> 'node_id')
                 for i, node in enumerate(data["nodes"]):
                     if not isinstance(node, dict):
-                        return f"Node {i} must be an object"
-                    if "node_id" not in node:
-                        return f"Node {i} missing 'node_id'"
-                    if "node_type" not in node:
-                        return f"Node {i} missing 'node_type'"
-                
+                        continue # Skip invalid nodes instead of failing entirely
+                    
+                    # AUTO-FIX: normalize keys to node_id
+                    if node.get("node_id") is None:
+                        node["node_id"] = node.get("id") or node.get("entity_id") or node.get("entity_name") or node.get("entity") or node.get("name")
+                    
+                    if node.get("node_type") is None:
+                        node["node_type"] = node.get("entity_type") or node.get("type") or "unknown"
+
+                    if node.get("node_id") is None:
+                        node["node_id"] = f"unnamed_{i}"
+                    
+                    if node.get("name") is None:
+                        node["name"] = node.get("node_id")
+
                 # Validate required fields in edges (filter invalid ones)
                 valid_edges = []
                 invalid_edges_count = 0
                 for i, edge in enumerate(data["edges"]):
-                    if isinstance(edge, dict) and "from_node_id" in edge and "to_node_id" in edge:
+                    if isinstance(edge, dict) and ("from_node_id" in edge or "source_id" in edge) and ("to_node_id" in edge or "target_id" in edge):
+                         # Normalize to from/to if legacy source/target used
+                         if "from_node_id" not in edge: edge["from_node_id"] = edge.get("source_id") or edge.get("from")
+                         if "to_node_id" not in edge: edge["to_node_id"] = edge.get("target_id") or edge.get("to")
                          valid_edges.append(edge)
                     else:
                          invalid_edges_count += 1
@@ -449,10 +492,10 @@ Respond with JSON containing your analysis.
                 
                 data["edges"] = valid_edges # Update list with valid only
             
-            return None  # Success
+            return None, data  # Success
             
         except Exception as e:
-            return f"Schema validation error: {str(e)}"
+            return f"Schema validation error: {str(e)}", data
     
     def _clean_json_response(self, text: str) -> str:
         """Cleans LLM response to extract only JSON"""
@@ -460,15 +503,44 @@ Respond with JSON containing your analysis.
         
         # Try to find JSON code block
         import re
-        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
         if json_match:
-            return json_match.group(1)
+            text = json_match.group(1)
             
-        # If no code block, try to find first { and last }
+        # If no code block, try to find first { or [ and last } or ]
         try:
-            start = text.index('{')
-            end = text.rindex('}') + 1
-            return text[start:end]
+            start_curly = text.find('{')
+            start_square = text.find('[')
+            
+            # Use the first one found
+            if start_curly != -1 and (start_square == -1 or start_curly < start_square):
+                start = start_curly
+                end = text.rindex('}') + 1
+            elif start_square != -1:
+                start = start_square
+                end = text.rindex(']') + 1
+            else:
+                return text
+                
+            json_fragment = text[start:end].strip()
+            
+            # HEURISTIC: Handle multiple objects not wrapped in a list
+            if not json_fragment.startswith('[') and re.search(r'}\s*,?\s*{', json_fragment):
+                print(f"[ACTION_RUNNER] Auto-wrapping fragmented JSON")
+                json_fragment = "[" + json_fragment + "]"
+
+            # HEURISTIC: Fix unquoted keys (common in some VLM outputs) e.g. { entities: ... }
+            # Match word chars followed by colon, not preceded by quote
+            # Be careful not to match inside strings. This is a simple heuristic.
+            # If it fails, the original syntax error will persist.
+            if "Expecting property name enclosed in double quotes" in str(text) or "{" in text:
+                 # Regex to find unquoted keys: `\s(\w+):` -> ` "\1":`
+                 # Only if we suspect standard unquoted keys.
+                 # Let's try fixing common pattern: `{ key: value }`
+                 # We only enable this if json loads fails later, but we are in cleaning phase.
+                 pass
+                 
+            return json_fragment
         except ValueError:
             return text
 

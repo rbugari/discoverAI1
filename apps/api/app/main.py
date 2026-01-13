@@ -84,11 +84,11 @@ def create_job(job: JobRequest):
     return {"job_id": new_job_id, "status": "queued"}
 
 @app.get("/solutions/{solution_id}/graph")
-def get_solution_graph(solution_id: str):
+def get_solution_graph(solution_id: str, mode: str = "GLOBAL", package_id: str = None):
     from .services.graph import get_graph_service
     # For now we return the whole graph as we are not filtering by subgraph yet in Neo4j service
     graph_service = get_graph_service()
-    data = graph_service.get_graph_data(solution_id)
+    data = graph_service.get_graph_data(solution_id, mode=mode, package_id=package_id)
     return data
 
 class ChatRequest(BaseModel):
@@ -276,6 +276,49 @@ async def reanalyze_solution(solution_id: str, request: ReanalyzeRequest = Reana
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/solutions/{solution_id}/cancel")
+async def cancel_solution_job(solution_id: str):
+    from .routers.solutions import get_supabase
+    supabase = get_supabase()
+    
+    # 1. Fetch active job
+    job_res = supabase.table("job_run")\
+        .select("job_id, status")\
+        .eq("project_id", solution_id)\
+        .in_("status", ["running", "queued"])\
+        .order("created_at", desc=True)\
+        .limit(1)\
+        .execute()
+        
+    if not job_res.data:
+         # Check if it's PLANNING READY (which is technically pause, but user might want to stop it)
+         job_res_p = supabase.table("job_run")\
+            .select("job_id, status")\
+            .eq("project_id", solution_id)\
+            .eq("status", "planning_ready")\
+            .order("created_at", desc=True)\
+            .limit(1)\
+            .execute()
+            
+         if not job_res_p.data:
+            return {"status": "no_active_job"}
+         job_id = job_res_p.data[0]["job_id"]
+    else:
+        job_id = job_res.data[0]["job_id"]
+    
+    print(f"[API] Cancelling job {job_id} for solution {solution_id}...")
+    
+    # 2. Update status to 'cancelled'
+    supabase.table("job_run").update({"status": "cancelled", "finished_at": "now()"}).eq("job_id", job_id).execute()
+    
+    # 3. Update solution status back to READY
+    supabase.table("solutions").update({"status": "READY"}).eq("id", solution_id).execute()
+    
+    # 4. Update queue if exists
+    supabase.table("job_queue").update({"status": "failed", "last_error": "User Cancelled"}).eq("job_id", job_id).execute()
+    
+    return {"status": "cancelled", "job_id": job_id}
+
 class SubgraphRequest(BaseModel):
     center_id: str
     depth: int = 1
@@ -400,7 +443,8 @@ async def get_solution_assets(
     query = supabase.table("asset").select("*", count="exact").eq("project_id", solution_id)
     
     if type and type != "ALL":
-        query = query.eq("asset_type", type)
+        # Use ilike for case-insensitive exact match
+        query = query.ilike("asset_type", type)
         
     if search:
         query = query.ilike("name_display", f"%{search}%")
@@ -409,6 +453,24 @@ async def get_solution_assets(
         
     res = query.execute()
     return {"data": res.data, "count": res.count}
+
+@app.get("/solutions/{solution_id}/asset-types")
+async def get_solution_asset_types(solution_id: str):
+    from supabase import create_client
+    from .config import settings
+    supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    
+    # Fetch distinct asset types
+    # Since Supabase simple client doesn't support distinct well without RPC, 
+    # we fetch all types (selecting only asset_type) and do unique in memory 
+    # as types are few per solution.
+    res = supabase.table("asset").select("asset_type").eq("project_id", solution_id).execute()
+    
+    if not res.data:
+        return {"types": []}
+        
+    types = sorted(list(set(item["asset_type"] for item in res.data if item.get("asset_type"))))
+    return {"types": types}
 
 @app.get("/assets/{asset_id}/details")
 async def get_asset_details(asset_id: str):

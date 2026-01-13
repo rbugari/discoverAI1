@@ -226,31 +226,134 @@ class SupabaseGraphService(GraphService):
         # Managed by Cascade in DB or manual clean endpoint
         pass
 
-    def get_graph_data(self, solution_id: str):
-        print(f"[SUPABASE GRAPH] Fetching graph for {solution_id}")
-        print(f"[SUPABASE GRAPH] Client URL: {settings.SUPABASE_URL}")
-        # print(f"[SUPABASE GRAPH] Key Used: {settings.SUPABASE_SERVICE_ROLE_KEY[:5]}...") 
+    def get_graph_data(self, solution_id: str, mode: str = "GLOBAL", package_id: str = None):
+        """
+        Fetches graph data based on perspective mode.
+        - GLOBAL: All assets and edges.
+        - ARCHITECTURE: Package-to-Package dependencies (based on common assets).
+        - PACKAGE: Components and context of a specific package.
+        """
+        print(f"[SUPABASE GRAPH] Fetching {mode} graph for {solution_id}")
+
+        if mode == "ARCHITECTURE":
+            return self._get_architecture_graph(solution_id)
+        elif mode == "PACKAGE" and package_id:
+            return self._get_package_graph(solution_id, package_id)
         
+        # DEFAULT: GLOBAL
         # 1. Fetch Assets (Nodes)
         assets_res = self.client.table("asset").select("*").eq("project_id", solution_id).execute()
-        assets = assets_res.data if assets_res.data else []
-        print(f"[SUPABASE GRAPH] Raw Assets Count: {len(assets)}")
+        assets = assets_res.data or []
         
         # 2. Fetch Edges
         edges_res = self.client.table("edge_index").select("*").eq("project_id", solution_id).execute()
-        edges = edges_res.data if edges_res.data else []
-        print(f"[SUPABASE GRAPH] Raw Edges Count: {len(edges)}")
+        edges = edges_res.data or []
         
-        print(f"[SUPABASE GRAPH] Found {len(assets)} assets and {len(edges)} edges")
+        return self._transform_to_cytoscape(assets, edges)
+
+    def _get_architecture_graph(self, solution_id: str):
+        """
+        Returns a high-level graph where nodes are Packages and edges 
+        represent Data Flow (Package A -> Asset -> Package B).
+        """
+        # 1. Fetch Packages as Nodes
+        pkg_res = self.client.table("package").select("*").eq("project_id", solution_id).execute()
+        packages = pkg_res.data or []
         
-        # 3. Transform to Frontend Format
-        # Format: { nodes: [{id, data: {label, type...}}], edges: [{id, source, target, label}] }
+        # 2. Fetch Edges to infer package links
+        # We look for flows where a Package (or its components) interacts with external assets
+        # For ARCHITECTURE, we treat Packages as the primary nodes.
+        nodes = []
+        for p in packages:
+            nodes.append({
+                "id": str(p["package_id"]),
+                "data": {
+                    "label": p["name"],
+                    "type": "PACKAGE",
+                    "system": p.get("type", "unknown"),
+                    "summary": p.get("description", "")
+                }
+            })
+
+        # 3. Infer links between packages
+        # A link A -> B exists if:
+        # Asset T is WRITTEN_BY A and READ_BY B
+        # Let's fetch all column lineage for the project
+        lin_res = self.client.table("column_lineage").select("source_asset_id, target_asset_id, package_id").eq("project_id", solution_id).execute()
+        lineages = lin_res.data or []
+
+        # Map Asset -> [Packages that write to it]
+        # Map Asset -> [Packages that read from it]
+        writers = {}
+        readers = {}
+
+        for l in lineages:
+            if not l["package_id"]: continue
+            
+            src = str(l["source_asset_id"]) if l["source_asset_id"] else None
+            tgt = str(l["target_asset_id"]) if l["target_asset_id"] else None
+            pkg = str(l["package_id"])
+
+            if tgt:
+                if tgt not in writers: writers[tgt] = set()
+                writers[tgt].add(pkg)
+            if src:
+                if src not in readers: readers[src] = set()
+                readers[src].add(pkg)
+
+        edges = []
+        visited_links = set()
+        for asset, p_writers in writers.items():
+            p_readers = readers.get(asset, set())
+            for w in p_writers:
+                for r in p_readers:
+                    if w != r and f"{w}->{r}" not in visited_links:
+                        edges.append({
+                            "id": f"flow_{w}_{r}",
+                            "source": w,
+                            "target": r,
+                            "label": "DATA_FLOW"
+                        })
+                        visited_links.add(f"{w}->{r}")
+
+        return {"nodes": nodes, "edges": edges}
+
+    def _get_package_graph(self, solution_id: str, package_id: str):
+        """
+        Returns a focused graph of a single package's internal components 
+        plus its immediate input/output tables.
+        """
+        # 1. Fetch Package Assets (Components)
+        # Components are bridged to 'asset' and tagged with package_id
+        assets_res = self.client.table("asset").select("*").eq("project_id", solution_id).execute()
+        all_assets = assets_res.data or []
         
+        package_assets = [a for a in all_assets if a.get("tags", {}).get("package_id") == package_id]
+        package_asset_ids = set(str(a["asset_id"]) for a in package_assets)
+
+        # 2. Fetch edges where at least one end is in the package
+        edges_res = self.client.table("edge_index").select("*").eq("project_id", solution_id).execute()
+        all_edges = edges_res.data or []
+        
+        relevant_edges = []
+        external_node_ids = set()
+        for e in all_edges:
+            src = str(e["from_asset_id"])
+            tgt = str(e["to_asset_id"])
+            if src in package_asset_ids or tgt in package_asset_ids:
+                relevant_edges.append(e)
+                if src not in package_asset_ids: external_node_ids.add(src)
+                if tgt not in package_asset_ids: external_node_ids.add(tgt)
+
+        # 3. Add external context nodes (Tables/Files)
+        external_assets = [a for a in all_assets if str(a["asset_id"]) in external_node_ids]
+        
+        return self._transform_to_cytoscape(package_assets + external_assets, relevant_edges)
+
+    def _transform_to_cytoscape(self, assets: list, edges: list):
         nodes_list = []
         for a in assets:
-            # Los atributos extraídos (schema, columns, etc) están en 'tags'
             tags = a.get("tags", {}) or {}
-            
             nodes_list.append({
                 "id": a["asset_id"],
                 "data": {
@@ -258,7 +361,7 @@ class SupabaseGraphService(GraphService):
                     "type": a["asset_type"],
                     "system": a.get("system", "unknown"),
                     "tags": tags,
-                    # Mapear explícitamente propiedades clave para el frontend
+                    "parent_id": tags.get("parent_node_id"),
                     "schema": tags.get("schema", ""),
                     "columns": tags.get("columns", []),
                     "summary": tags.get("description", "") or tags.get("summary", "")
@@ -271,38 +374,27 @@ class SupabaseGraphService(GraphService):
                 "id": e["edge_id"],
                 "source": e["from_asset_id"],
                 "target": e["to_asset_id"],
-                "label": e["edge_type"]
+                "label": e["edge_type"],
+                "data": {
+                    "confidence": e.get("confidence", 1.0),
+                    "is_hypothesis": e.get("is_hypothesis", False),
+                    "rationale": e.get("rationale", None)
+                }
             })
             
         return {"nodes": nodes_list, "edges": edges_list}
 
     def get_subgraph(self, center_id: str, depth: int, limit: int):
-        # Basic implementation for depth=1 (common case)
-        # For deeper graphs, recursive CTEs or multiple queries needed.
-        # MVP: Return neighbors
-        
-        # Outgoing
-        out_edges = self.client.table("edge_index").select("*").eq("from_asset_id", center_id).execute().data
-        
-        # Incoming
-        in_edges = self.client.table("edge_index").select("*").eq("to_asset_id", center_id).execute().data
-        
+        # (Recursive neighbors logic remains similar but uses _transform_to_cytoscape)
+        out_edges = self.client.table("edge_index").select("*").eq("from_asset_id", center_id).execute().data or []
+        in_edges = self.client.table("edge_index").select("*").eq("to_asset_id", center_id).execute().data or []
         all_edges = out_edges + in_edges
-        
-        # Collect Node IDs
-        node_ids = set([center_id])
-        for e in all_edges:
-            node_ids.add(e["from_asset_id"])
-            node_ids.add(e["to_asset_id"])
-            
-        # Fetch Nodes
-        assets = self.client.table("asset").select("*").in_("asset_id", list(node_ids)).execute().data
-        
-        # Transform
-        nodes_list = [{"id": a["asset_id"], "data": {"label": a["name_display"], "type": a["asset_type"]}} for a in assets]
-        edges_list = [{"id": e["edge_id"], "source": e["from_asset_id"], "target": e["to_asset_id"], "label": e["edge_type"]} for e in all_edges]
-        
-        return {"nodes": nodes_list, "edges": edges_list}
+        node_ids = set([center_id] + [e["from_asset_id"] for e in all_edges] + [e["to_asset_id"] for e in all_edges])
+        assets = self.client.table("asset").select("*").in_("asset_id", list(node_ids)).execute().data or []
+        return self._transform_to_cytoscape(assets, all_edges)
+
+    def find_paths(self, from_id: str, to_id: str, max_hops: int):
+        return {"nodes": [], "edges": []}
 
     def find_paths(self, from_id: str, to_id: str, max_hops: int):
         # Not implemented for SQL yet (requires recursive query)

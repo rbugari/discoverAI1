@@ -1,4 +1,4 @@
-# DiscoverAI — Plan de implementación (Jobs + Evidencias/Confianza + Catálogo SQL + UX Grafo)
+# DiggerAI — Plan de implementación (Jobs + Evidencias/Confianza + Catálogo SQL + UX Grafo)
 > [!NOTE]
 > **Status: Implemented (v4.0 Full Base)**. Este documento sirvió como el blueprint original para la evolución a V3/V4 y se mantiene como referencia histórica del diseño y los principios de confianza.
 

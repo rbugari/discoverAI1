@@ -21,12 +21,14 @@ class JobPlanMode(str, Enum):
 class AreaKey(str, Enum):
     FOUNDATION = "FOUNDATION"
     PACKAGES = "PACKAGES"
+    DOCS = "DOCS"
     AUX = "AUX"
 
 class Strategy(str, Enum):
     PARSER_ONLY = "PARSER_ONLY"
     PARSER_PLUS_LLM = "PARSER_PLUS_LLM"
     LLM_ONLY = "LLM_ONLY"
+    VLM_EXTRACT = "VLM_EXTRACT"
     SKIP = "SKIP"
 
 class RecommendedAction(str, Enum):

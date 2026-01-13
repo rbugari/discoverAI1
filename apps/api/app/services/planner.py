@@ -78,12 +78,19 @@ class PlannerService:
                     if rel_path in existing_evidence and file_hash in existing_evidence[rel_path]:
                         is_duplicate = True
                     
-                    # Policy Check
                     if is_duplicate:
                         rec_action = RecommendedAction.SKIP
                         reason = "Unchanged (already processed)"
                     else:
                         rec_action, reason = self.policy_engine.evaluate(rel_path, size_bytes)
+                        
+                    # --- USER OVERRIDE: ALWAYS PROCESS SQL/DTSX ---
+                    # Ensure critical files are always selected by default
+                    ext_lower = rel_path.split('.')[-1].lower() if '.' in rel_path else ""
+                    if ext_lower in ["sql", "dtsx", "dsx"]:
+                        rec_action = RecommendedAction.PROCESS
+                        reason = "Core Artifact (Always Process)"
+                    # ----------------------------------------------
                     
                     # Classification & Strategy
                     area_key, strategy = self._classify_file(rel_path, rec_action)
@@ -169,7 +176,8 @@ class PlannerService:
         areas_def = [
             {"key": AreaKey.FOUNDATION, "title": "Foundation (SQL & Schema)", "order": 1},
             {"key": AreaKey.PACKAGES, "title": "Orchestration & Packages", "order": 2},
-            {"key": AreaKey.AUX, "title": "Auxiliary & Scripts", "order": 3}
+            {"key": AreaKey.DOCS, "title": "Documentation & Diagrams", "order": 3},
+            {"key": AreaKey.AUX, "title": "Auxiliary & Scripts", "order": 4}
         ]
         
         area_map = {}
@@ -205,14 +213,17 @@ class PlannerService:
         lower_path = path.lower()
         ext = lower_path.split('.')[-1] if '.' in lower_path else ""
         
-        # 1. Foundation
         if ext in ["sql", "ddl"] or "schema" in lower_path or "migration" in lower_path:
             return AreaKey.FOUNDATION, Strategy.PARSER_PLUS_LLM
             
-        if ext in ["md", "json", "txt"] and ("readme" in lower_path or "contract" in lower_path):
-             return AreaKey.FOUNDATION, Strategy.LLM_ONLY
+        # 2. Documentation & Diagrams
+        if ext in ["md", "json", "txt"] and ("readme" in lower_path or "contract" in lower_path or "docs" in lower_path):
+             return AreaKey.DOCS, Strategy.LLM_ONLY
 
-        # 2. Packages
+        if ext in ["jpg", "jpeg", "png", "gif", "webp"]:
+            return AreaKey.DOCS, Strategy.VLM_EXTRACT
+
+        # 3. Packages
         if ext in ["dtsx", "dsx"]:
             return AreaKey.PACKAGES, Strategy.PARSER_PLUS_LLM # Hybrid Parser v3
             

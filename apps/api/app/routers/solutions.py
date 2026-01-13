@@ -163,3 +163,17 @@ def get_job_logs(job_id: str, supabase: Client = Depends(get_supabase)):
     except Exception as e:
         print(f"[ERROR] Failed to fetch logs for {job_id}: {e}", flush=True)
         return []
+from ..services.lineage_service import LineageService
+
+# ... (existing imports/setup)
+
+@router.get("/{solution_id}/lineage/trace")
+def trace_column(
+    solution_id: str, 
+    asset_id: str, 
+    column_name: str, 
+    max_depth: int = 5, 
+    supabase: Client = Depends(get_supabase)
+):
+    service = LineageService(supabase)
+    return service.trace_column_upstream(solution_id, asset_id, column_name, max_depth)

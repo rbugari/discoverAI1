@@ -36,13 +36,21 @@ class CatalogService:
             if existing.data:
                 asset_id = existing.data[0]["asset_id"]
                 # Update existing asset (Upsert logic)
+                updated_tags = node.attributes.copy()
+                if node.parent_node_id:
+                    updated_tags["parent_node_id"] = node.parent_node_id
+                
                 self.supabase.table("asset").update({
-                    "tags": node.attributes,
+                    "tags": updated_tags,
                     "updated_at": "now()",
                     "system": node.system
                 }).eq("asset_id", asset_id).execute()
             else:
                 asset_id = str(uuid.uuid4())
+                tags = node.attributes.copy()
+                if node.parent_node_id:
+                    tags["parent_node_id"] = node.parent_node_id
+                
                 asset_data = {
                     "asset_id": asset_id,
                     "project_id": project_id,
@@ -50,7 +58,7 @@ class CatalogService:
                     "name_display": node.name,
                     "canonical_name": node.name, # logic to canonicalize?
                     "system": node.system,
-                    "tags": node.attributes,
+                    "tags": tags,
                     "created_at": "now()",
                     "updated_at": "now()"
                 }
@@ -154,6 +162,8 @@ class CatalogService:
     def sync_deep_dive_result(self, result: DeepDiveResult, project_id: str):
         """
         Writes packages, components, transformations, and lineage to the SQL Catalog.
+        Also bridges these detailed results to the main 'asset' and 'edge_index' tables
+        to ensure they appear in the unified graph.
         """
         # 1. Package
         pkg = result.package
@@ -167,8 +177,10 @@ class CatalogService:
 
         self.supabase.table("package").upsert(pkg_data).execute()
 
-        # 2. Components
-        comp_id_map = {} # local/input id to UUID if needed, but components should have UUIDs
+        # 2. Components -> Bridge to Asset Table
+        # We want internal components to be visible as nodes in the graph
+        comp_to_asset_id = {} # Map component_id -> asset_id (UUID)
+        
         for comp in result.components:
             comp_data = comp.model_dump()
             comp_data["created_at"] = comp_data["created_at"].isoformat()
@@ -176,40 +188,123 @@ class CatalogService:
             if comp_data.get("package_id"): comp_data["package_id"] = str(comp_data["package_id"])
             if comp_data.get("parent_component_id"): comp_data["parent_component_id"] = str(comp_data["parent_component_id"])
             
+            # Save to specific table
             self.supabase.table("package_component").upsert(comp_data).execute()
-        
+
+            # --- BRIDGE TO ASSET TABLE ---
+            # Heuristic: Determine a good display name and type
+            node_name = comp.name
+            node_type = f"COMPONENT_{comp.type}" # e.g. COMPONENT_SOURCE, COMPONENT_TRANSFORM
+            
+            # Check if this component already exists as an asset
+            # We use a stable ID if possible or lookup by name+project+pkg
+            existing_asset = self.supabase.table("asset")\
+                .select("asset_id")\
+                .eq("project_id", project_id)\
+                .eq("name_display", node_name)\
+                .eq("asset_type", node_type)\
+                .execute()
+            
+            if existing_asset.data:
+                asset_id = existing_asset.data[0]["asset_id"]
+            else:
+                asset_id = str(uuid.uuid4())
+                asset_record = {
+                    "asset_id": asset_id,
+                    "project_id": project_id,
+                    "asset_type": node_type,
+                    "name_display": node_name,
+                    "canonical_name": f"{pkg.name}:{node_name}",
+                    "system": pkg.source_system or "ssis",
+                    "tags": {
+                        "package_id": str(pkg.package_id),
+                        "component_id": str(comp.component_id),
+                        "parent_asset_id": str(pkg.asset_id) if pkg.asset_id else None,
+                        "original_config": comp.config
+                    },
+                    "created_at": "now()",
+                    "updated_at": "now()"
+                }
+                self.supabase.table("asset").insert(asset_record).execute()
+            
+            comp_to_asset_id[str(comp.component_id)] = asset_id
+
         # 3. Transformation IR
         for ir in result.transformations:
             ir_data = ir.model_dump()
             ir_data["created_at"] = ir_data["created_at"].isoformat()
-            if ir_data.get("ir_id"): ir_data["ir_id"] = str(ir_data["ir_id"])
-            if ir_data.get("project_id"): ir_data["project_id"] = str(ir_data["project_id"])
-            if ir_data.get("source_component_id"): ir_data["source_component_id"] = str(ir_data["source_component_id"])
+            ir_data["ir_id"] = str(ir.ir_id)
+            ir_data["project_id"] = str(ir.project_id)
+            if ir.source_component_id: ir_data["source_component_id"] = str(ir.source_component_id)
             
             self.supabase.table("transformation_ir").upsert(ir_data).execute()
 
-        # 4. Column Lineage
+        # 4. Column Lineage -> Bridge to Edge Index
+        # This creates the "mesh" of relationships
         for lin in result.lineage:
             lin_data = lin.model_dump()
             lin_data["created_at"] = lin_data["created_at"].isoformat()
-            if lin_data.get("lineage_id"): lin_data["lineage_id"] = str(lin_data["lineage_id"])
-            if lin_data.get("project_id"): lin_data["project_id"] = str(lin_data["project_id"])
-            if lin_data.get("package_id"): lin_data["package_id"] = str(lin_data["package_id"])
-            if lin_data.get("ir_id"): lin_data["ir_id"] = str(lin_data["ir_id"])
-            if lin_data.get("source_asset_id"): lin_data["source_asset_id"] = str(lin_data["source_asset_id"])
-            if lin_data.get("target_asset_id"): lin_data["target_asset_id"] = str(lin_data["target_asset_id"])
+            lin_data["lineage_id"] = str(lin.lineage_id)
+            lin_data["project_id"] = str(lin.project_id)
+            lin_data["package_id"] = str(lin.package_id)
+            if lin.ir_id: lin_data["ir_id"] = str(lin.ir_id)
+            if lin.source_asset_id: lin_data["source_asset_id"] = str(lin.source_asset_id)
+            if lin.target_asset_id: lin_data["target_asset_id"] = str(lin.target_asset_id)
             
             self.supabase.table("column_lineage").upsert(lin_data).execute()
+
+            # --- BRIDGE TO EDGE_INDEX ---
+            # Resolve from source/target asset IDs (which might be the Tables from Macro)
+            # or from the Components we just created.
+            from_asset = str(lin.source_asset_id) if lin.source_asset_id else None
+            to_asset = str(lin.target_asset_id) if lin.target_asset_id else None
+            
+            # --- RESOLVE MAPPED ASSETS ---
+            # If the ID provided is a Component ID, we swap it for the Asset ID we just created
+            if from_asset in comp_to_asset_id:
+                from_asset = comp_to_asset_id[from_asset]
+            if to_asset in comp_to_asset_id:
+                to_asset = comp_to_asset_id[to_asset]
+            
+            if from_asset and to_asset:
+                edge_id = str(uuid.uuid4())
+                edge_record = {
+                    "edge_id": edge_id,
+                    "project_id": str(project_id),
+                    "from_asset_id": from_asset,
+                    "to_asset_id": to_asset,
+                    "edge_type": "DETAILED_LINEAGE",
+                    "confidence": lin.confidence or 1.0,
+                    "extractor_id": "DeepDiveBridge",
+                    "is_hypothesis": False
+                }
+                # Check for existing before insert to avoid duplicates
+                check = self.supabase.table("edge_index")\
+                    .select("edge_id")\
+                    .eq("project_id", str(project_id))\
+                    .eq("from_asset_id", from_asset)\
+                    .eq("to_asset_id", to_asset)\
+                    .eq("edge_type", "DETAILED_LINEAGE")\
+                    .execute()
+                
+                if not check.data:
+                    self.supabase.table("edge_index").insert(edge_record).execute()
 
     def get_solution_context(self, project_id: str) -> dict:
         """
         Gathers all relevant context for the Reasoning Agent.
         """
-        # 1. Assets Summary
-        assets = self.supabase.table("asset").select("asset_type, count").eq("project_id", project_id).execute()
+        # 1. Assets Summary (Grouped count)
+        assets_res = self.supabase.table("asset").select("asset_type").eq("project_id", project_id).execute()
+        asset_counts = {}
+        for a in assets_res.data:
+            t = a["asset_type"]
+            asset_counts[t] = asset_counts.get(t, 0) + 1
+        
+        inventory = [{"asset_type": k, "count": v} for k, v in asset_counts.items()]
         
         # 2. Key Lineage
-        edges = self.supabase.table("edge_index")\
+        edges_res = self.supabase.table("edge_index")\
             .select("edge_type, from_asset_id, to_asset_id, is_hypothesis, confidence")\
             .eq("project_id", project_id)\
             .order("confidence", desc=False)\
@@ -217,10 +312,10 @@ class CatalogService:
             .execute()
             
         # 3. Packages
-        packages = self.supabase.table("package").select("name, type").eq("project_id", project_id).execute()
+        packages_res = self.supabase.table("package").select("name, type").eq("project_id", project_id).execute()
         
         return {
-            "inventory": assets.data,
-            "hotspots": [e for e in edges.data if e["confidence"] < 0.7 or e["is_hypothesis"]],
-            "packages": packages.data
+            "inventory": inventory,
+            "hotspots": [e for e in edges_res.data if e["confidence"] < 0.7 or e["is_hypothesis"]],
+            "packages": packages_res.data
         }

@@ -24,6 +24,7 @@ from ..services.catalog import CatalogService
 from ..services.planner import PlannerService
 from ..services.extractors.ssis import SSISParser
 from ..services.extractors.datastage import DataStageParser
+from ..services.extractors.registry import ExtractorRegistry
 from ..services.auditor import DiscoveryAuditor
 from ..services.refiner import DiscoveryRefiner
 from ..services.prompt_service import PromptService
@@ -215,14 +216,37 @@ class PipelineOrchestrator:
             # Update Job Progress (Current Item)
             self._update_job_progress(job_id, f"processing: {os.path.basename(item['path'])}", progress)
             
+            # Check for Cancellation
+            try:
+                job_check = self.supabase.table("job_run").select("status").eq("job_id", job_id).single().execute()
+                if job_check.data and job_check.data.get("status") == "cancelled":
+                    print(f"[PIPELINE v3] Job {job_id} cancelled by user. Aborting...", flush=True)
+                    return False
+            except Exception as cancel_e:
+                print(f"[PIPELINE v3] Error checking cancellation status: {cancel_e}")
+            
             # Read Content
             full_path = os.path.join(root_path, item["path"])
             print(f"!!! LOOP TRACE: Attempting to read: {full_path}")
             try:
                 if not os.path.exists(full_path):
                     raise FileNotFoundError(f"File not found: {full_path}")
-                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
+                
+                strategy_val = item.get("strategy")
+                if hasattr(strategy_val, 'value'): strategy_val = strategy_val.value
+                
+                # Check if we need binary reading (VLM)
+                is_binary = strategy_val == "VLM_EXTRACT"
+                
+                if is_binary:
+                    import base64
+                    with open(full_path, 'rb') as f:
+                        binary_data = f.read()
+                        # Base64 encode for LLM consumption
+                        content = base64.b64encode(binary_data).decode('utf-8')
+                else:
+                    with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
             except Exception as e:
                 print(f"Error reading file {full_path}: {e}")
                 self.supabase.table("job_plan_item").update({"status": "failed"}).eq("item_id", item["item_id"]).execute()
@@ -252,6 +276,9 @@ class PipelineOrchestrator:
                         traceback.print_exc()
             else:
                 self.supabase.table("job_plan_item").update({"status": "failed"}).eq("item_id", item["item_id"]).execute()
+            
+            # Accumulate result for Graph Sync and Reporting
+            file_results.append(res)
 
         # Finalize
         print(f"[PIPELINE v3] Finalizing execution...")
@@ -316,7 +343,7 @@ class PipelineOrchestrator:
                 return self._create_success_result(item["path"], "PARSER_ONLY", 
                                                  self._extract_with_native_parser(job_id, full_path, content), start_time)
             
-            elif strategy_val in [Strategy.LLM_ONLY, Strategy.PARSER_PLUS_LLM, "LLM_ONLY", "PARSER_PLUS_LLM"]:
+            elif strategy_val in [Strategy.LLM_ONLY, Strategy.PARSER_PLUS_LLM, Strategy.VLM_EXTRACT, "LLM_ONLY", "PARSER_PLUS_LLM", "VLM_EXTRACT"]:
                 print(f"!!! MEGA TRACE: Strategy is LLM-based ({strategy_val}) for {item['path']}")
                 # Determine Action Profile based on file type / item type
                 action_name = self._determine_action_profile(item)
@@ -324,10 +351,10 @@ class PipelineOrchestrator:
                 res = self._extract_with_llm(job_id, full_path, content, action_name)
                 
                 if res.success:
-                     return self._create_success_result(item["path"], strategy, res, start_time)
+                     return self._create_success_result(item["path"], strategy_val, res, start_time)
                 else:
                      print(f"!!! MEGA TRACE: _extract_with_llm FAILED for {item['path']}: {res.error_message}")
-                     return self._create_error_result(item["path"], strategy, res, start_time)
+                     return self._create_error_result(item["path"], strategy_val, res, start_time)
                      
             else:
                 print(f"!!! MEGA TRACE: UNKNOWN STRATEGY hit: {strategy_val}")
@@ -348,6 +375,8 @@ class PipelineOrchestrator:
             return "extract.lineage.package" # v3 profile (dotted)
         elif ft in ["PY", "IPYNB"]:
             return "extract.python" # v3 profile (dotted)
+        elif ft in ["JPG", "JPEG", "PNG"]: # SVG excluded from VLM
+            return "extract.diagram" # [NEW] Vision profile
         else:
             return "extract.strict" # Fallback (dotted)
 
@@ -400,8 +429,65 @@ class PipelineOrchestrator:
             }
             
             context = {"job_id": job_id, "file_path": item["path"]}
+
+            # --- v4.1 DETERMINISTIC EXTRACTOR SHORTCUT ---
+            # If we have a dedicated python extractor (like for SSIS), use it instead of LLM
+            ext = os.path.splitext(item["path"])[1].lower()
+            if ext == ".dtsx":
+                print(f"[PIPELINE v4] Using Deterministic SSIS Deep Extractor for {item['path']}")
+                try:
+                    # Capture raw content (it might be encoded/summarized in 'content' arg)
+                    # For deep dive, we usually trust 'content' passed to this method unless it was mutated upstream.
+                    # Wait, 'content' passed to 'execute_pipeline' loop is fresh read.
+                    # BUT 'content' passed to '_process_item_v3' (which mutated it) is NOT passed here.
+                    # This method '_perform_deep_dive' receives 'content' from '_execute_plan' loop.
+                    # In '_execute_plan', 'content' is read from file.
+                    # Wait, let's check call site.
+                    # Line 272 calls self._perform_deep_dive(job_id, item, content, res, node_id_map)
+                    # In _execute_plan, 'content' is read from file. It is NOT mutated.
+                    # So 'content' here IS raw. The mutation happens inside _extract_with_llm which is called by _process_item_v3.
+                    # Ah, _process_item_v3 is called with 'content'.
+                    # It mutates 'content' locally inside _extract_with_llm? No.
+                    # _extract_with_llm receives 'content'. Python strings are immutable, but the variable 'content' inside that function changes.
+                    # However, '_execute_plan' holds the original string.
+                    # So 'content' passed to this method IS SAFE.
+                    # BUT wait, the previous fix to _extract_with_llm was needed because THAT was where macro ran.
+                    # Here for Deep Dive, we are fine.
+                    
+                    registry = ExtractorRegistry()
+                    deep_result = registry.get_extractor(item["path"]).extract_deep(item["path"], content)
+                    
+                    if deep_result:
+                        print(f"[PIPELINE v4] Deterministic Extraction Successful!")
+                        # Sync and return immediately
+                        # Fetch project_id (needed for sync validation inside catalog or explicit pass)
+                        job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
+                        project_id_val = job_res.data.get("project_id")
+                        
+                        # Fix UUIDs: The extractor generates random project_id. We must overwrite it.
+                        real_pid = str(project_id_val)
+                        
+                        deep_result.package.project_id = real_pid
+                        for comp in deep_result.components:
+                            # Component doesn't usually have project_id but check model
+                             if hasattr(comp, 'project_id'): comp.project_id = real_pid
+                        for trans in deep_result.transformations:
+                            trans.project_id = real_pid
+                        for lin in deep_result.lineage:
+                            lin.project_id = real_pid
+                        
+                        # Perform sync
+                        self.catalog.sync_deep_dive_result(deep_result, real_pid)
+                        print(f"[PIPELINE v4] Deep Dive Persisted (Deterministic).")
+                        return
+                    else:
+                         print("[PIPELINE v4] Deterministic extraction returned None. Falling back to LLM.")
+                except Exception as det_e:
+                    print(f"[PIPELINE v4] Deterministic Extraction Failed: {det_e}")
+                    traceback.print_exc()
+                    # Fallback to LLM execution below
             
-            # 2. Run Deep Dive Action
+            # 2. Run Deep Dive Action (LLM Fallback/Default)
             action_name = "extract.deep_dive"
             print(f"[PIPELINE v4] Calling ActionRunner for {action_name}")
             result = self.action_runner.run_action(action_name, llm_input, context)
@@ -413,6 +499,13 @@ class PipelineOrchestrator:
             # 3. Process & Persist Deep Dive Results
             # We expect a JSON that fits DeepDiveResult (Package, Components, Transformations, Lineage)
             data = result.data or {}
+            
+            # AUTO-FIX: If LLM returned a list (common with some models), try to find the dict inside or default
+            if isinstance(data, list):
+                if len(data) > 0 and isinstance(data[0], dict):
+                    data = data[0]
+                else:
+                    data = {}
             
             # Fetch project_id
             job_res = self.supabase.table("job_run").select("project_id").eq("job_id", job_id).single().execute()
@@ -579,14 +672,45 @@ class PipelineOrchestrator:
         # Enhanced Logic for SSIS/Packages (Deep Inspection)
         is_ssis = file_path.lower().endswith(".dtsx") or file_path.lower().endswith(".xml")
         is_dsx = file_path.lower().endswith(".dsx")
+        
+        # Capture raw content for deterministic extractors before it potentially gets summarized for LLM
+        raw_content = content 
 
         if is_ssis:
             try:
                 print(f"[PIPELINE v3] Running Deep Package Inspection (SSIS Parser) for {file_path}")
                 structure = SSISParser.parse_structure(content)
-                content = f"XML STRUCTURE SUMMARY:\n{json.dumps(structure, indent=2)}\n\nRAW CONTENT:\n{content}"
+                
+                # To avoid token limits with Flash models, we prioritize the structure summary
+                # and only include raw content if it's reasonably sized.
+                struct_json = json.dumps(structure, indent=2)
+                if len(content) > 20000:
+                    content = f"XML STRUCTURE SUMMARY:\n{struct_json}\n\nRAW CONTENT (Truncated):\n{content[:5000]}... [REST TRUNCATED]"
+                else:
+                    content = f"XML STRUCTURE SUMMARY:\n{struct_json}\n\nRAW CONTENT:\n{content}"
             except Exception as e:
                 print(f"[PIPELINE] SSIS Parser failed for {file_path}: {e}")
+                
+            # --- v4.2 Deterministic Macro Extraction ---
+            # Using the new extract_macro from SSISDeepExtractor
+            try:
+                print(f"[PIPELINE v4] Using Deterministic Macro Extraction for {file_path}")
+                registry = ExtractorRegistry()
+                # Use raw_content to ensure valid XML parsing
+                macro_result = registry.extract(file_path, raw_content)
+                
+                if macro_result:
+                     return ActionResult(
+                        success=True,
+                        data=macro_result.model_dump(), # Pydantic to dict
+                        model_used="SSISDeepExtractor",
+                        latency_ms=0
+                     )
+            except Exception as e:
+                print(f"[PIPELINE v4] Deterministic Macro Failed: {e}")
+                traceback.print_exc()
+                # Fallback to LLM if needed, or fail safe
+
         
         elif is_dsx:
             try:
@@ -638,10 +762,37 @@ class PipelineOrchestrator:
             if "evidences" not in res.data: res.data["evidences"] = []
             
             # Fix Nodes & Edges names/ids
-            for node in res.data.get("nodes", []):
-                if "name" not in node and "node_id" in node:
-                    node["name"] = node["node_id"].split('.')[-1]
-                if "system" not in node: node["system"] = "unknown"
+            # Fix Nodes & Edges names/ids (Double Safety Check)
+            filtered_nodes = []
+            for i, node in enumerate(res.data.get("nodes", [])):
+                if not isinstance(node, dict): continue
+                
+                # Critical Pydantic Fix: Ensure fields are NEVER None
+                if not node.get("node_id"): node["node_id"] = f"unnamed_node_{i}_{job_id[:4]}"
+                if not node.get("name"): node["name"] = node["node_id"].split('.')[-1]
+                if not node.get("node_type"): node["node_type"] = "unknown"
+                if not node.get("system"): node["system"] = "unknown"
+                
+                # Sanitize strings to avoid "None" string literal if that happened upstream
+                if node["node_id"] is None: node["node_id"] = f"unnamed_node_{i}_{job_id[:4]}"
+                if node["name"] is None: node["name"] = "unnamed"
+
+                # V6.5 FIX: Attributes must be a dict, not a list
+                if "attributes" in node:
+                    if isinstance(node["attributes"], list):
+                        # Convert list of KV pairs to dict if needed (common VLM hallucination)
+                        new_attrs = {}
+                        for item in node["attributes"]:
+                            if isinstance(item, dict):
+                                k = item.get("name") or item.get("attribute_name") or "unknown"
+                                v = item.get("value") or item.get("attribute_value") or "unknown"
+                                new_attrs[str(k)] = v
+                        node["attributes"] = new_attrs
+                    elif not isinstance(node["attributes"], dict):
+                         node["attributes"] = {} # nuking invalid format
+
+                filtered_nodes.append(node)
+            res.data["nodes"] = filtered_nodes
             
             for edge in res.data.get("edges", []):
                 if "edge_id" not in edge: edge["edge_id"] = str(uuid.uuid4())

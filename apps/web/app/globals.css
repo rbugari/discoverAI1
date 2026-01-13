@@ -134,6 +134,8 @@
       radial-gradient(at 0% 0%, rgba(249, 115, 22, 0.08) 0px, transparent 50%),
       radial-gradient(at 100% 100%, rgba(249, 115, 22, 0.03) 0px, transparent 50%);
     background-attachment: fixed;
+    font-size: 105%;
+    /* [NEW] Increased base scale for better legibility */
   }
 
   .glass {
@@ -186,4 +188,78 @@
       background-position: 0% 50%;
     }
   }
+}
+
+@layer base {
+
+  /* --- DIGGER AI VISUAL PORT - LEGACY COMPATIBILITY --- 
+     These override or supplement the v6.0 variables where specifically required by CustomNodes.tsx 
+  */
+  :root {
+    --node-pipeline-bg: #f3e8ff;
+    --node-pipeline-border: #a154ff;
+    --node-script-bg: #fff7ed;
+    --node-script-border: #ff6b00;
+    --node-table-bg: #dcfce7;
+    --node-table-border: #22c55e;
+    --node-db-bg: #eff6ff;
+    --node-db-border: #3b82f6;
+    --node-package-bg: #fee2e2;
+    --node-package-border: #ef4444;
+    /* Ensures red/pink for Package Group nodes */
+  }
+}
+
+/* --- Advanced Graph Intelligence Styles --- */
+.node-impact-active {
+  animation: impact-pulse 2s infinite;
+  z-index: 50 !important;
+}
+
+@keyframes impact-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), 0 0 20px rgba(239, 68, 68, 0.3);
+    transform: scale(1);
+  }
+
+  50% {
+    box-shadow: 0 0 0 15px rgba(239, 68, 68, 0), 0 0 30px rgba(239, 68, 68, 0.5);
+    transform: scale(1.05);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0), 0 0 20px rgba(239, 68, 68, 0.3);
+    transform: scale(1);
+  }
+}
+
+.edge-impact-active {
+  stroke: #ef4444 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 5px rgba(239, 68, 68, 0.5));
+  transition: all 0.3s ease;
+}
+
+/* --- Premium Utilities --- */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(249, 115, 22, 0.2);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.5);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }

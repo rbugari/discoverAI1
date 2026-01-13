@@ -10,7 +10,7 @@ import {
   flexRender,
   ColumnDef
 } from '@tanstack/react-table';
-import { Loader2, Search, Filter, Database, FileText, Activity, Table, Code, Box, Layers } from 'lucide-react';
+import { Loader2, Search, Filter, Database, FileText, Activity, Table, Code, Box, Layers, LayoutGrid, X } from 'lucide-react';
 import Link from 'next/link';
 
 // Color Mapping (Matches Graph View)
@@ -45,6 +45,7 @@ export default function CatalogPage({ params }: CatalogPageProps) {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [details, setDetails] = useState<any>(null);
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
 
   const fetchAssets = async () => {
     setLoading(true);
@@ -65,6 +66,19 @@ export default function CatalogPage({ params }: CatalogPageProps) {
       setLoading(false);
     }
   };
+
+  const fetchAvailableTypes = async () => {
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${params.id}/asset-types`);
+      setAvailableTypes(res.data.types || []);
+    } catch (e) {
+      console.error("Error fetching asset types:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchAvailableTypes();
+  }, [params.id]);
 
   useEffect(() => {
     fetchAssets();
@@ -148,284 +162,291 @@ export default function CatalogPage({ params }: CatalogPageProps) {
   };
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="flex h-[calc(100vh-64px)] p-6 gap-6 bg-slate-950/20">
       {/* Main Content: Table */}
-      <div className={`flex-1 p-6 overflow-hidden flex flex-col ${selectedAsset ? 'w-2/3' : 'w-full'}`}>
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
-            <Link href={`/solutions/${params.id}`} className="text-gray-500 hover:text-gray-900">&larr; Back to Graph</Link>
-            <h1 className="text-2xl font-bold">Asset Catalog</h1>
+      <div className={`flex-1 overflow-hidden flex flex-col ${selectedAsset ? 'w-2/3' : 'w-full'} transition-all duration-500 ease-out`}>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+          <div className="flex flex-col gap-1">
+            <Link
+              href={`/solutions/${params.id}`}
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors mb-2"
+            >
+              &larr; Return to Graph
+            </Link>
+            <h1 className="text-3xl font-black tracking-tighter text-foreground flex items-center gap-3">
+              <LayoutGrid className="text-primary" size={28} /> Asset Catalog
+            </h1>
+            <p className="text-muted-foreground font-medium text-sm max-w-xl">
+              Comprehensive inventory of all discovered technical assets and their metadata.
+            </p>
           </div>
-          <div className="flex gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+          <div className="flex gap-3 items-center">
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
               <input
                 type="text"
                 placeholder="Search assets..."
-                className="pl-9 h-9 w-[200px] lg:w-[300px] rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950"
+                className="pl-10 h-10 w-[200px] lg:w-[300px] rounded-xl border border-border bg-muted/40 backdrop-blur-sm px-4 py-2 text-sm shadow-inner transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 focus:bg-muted/60"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <select
-              className="h-9 rounded-md border border-gray-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none"
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-            >
-              <option value="ALL">All Types</option>
-              <option value="TABLE">Tables</option>
-              <option value="FILE">Files</option>
-              <option value="PIPELINE">Pipelines</option>
-            </select>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <select
+                className="h-10 pl-10 pr-8 rounded-xl border border-border bg-muted/40 backdrop-blur-sm text-sm shadow-inner transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 focus:bg-muted/60 appearance-none cursor-pointer font-medium"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+              >
+                <option value="ALL">All Types</option>
+                {availableTypes.map(type => (
+                  <option key={type} value={type}>
+                    {type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' ')}s
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="border rounded-md flex-1 overflow-auto bg-white dark:bg-zinc-900">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-zinc-800 sticky top-0">
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <th key={header.id} className="px-6 py-3 font-medium">
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={columns.length} className="text-center py-10">
-                    <Loader2 className="animate-spin inline mr-2" /> Loading...
-                  </td>
-                </tr>
-              ) : data.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="text-center py-10 text-gray-500">
-                    No assets found.
-                  </td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map(row => {
-                  const assetType = (row.original.asset_type || 'DEFAULT').toUpperCase();
-                  const colors = NODE_COLORS[assetType] || NODE_COLORS['DEFAULT'];
+        <div className="border border-border/50 rounded-[2rem] flex-1 overflow-hidden bg-card/50 backdrop-blur-md shadow-2xl flex flex-col relative">
+          <div className="overflow-auto flex-1 custom-scrollbar">
+            <table className="w-full text-sm text-left border-collapse">
+              <thead className="text-[10px] text-muted-foreground uppercase font-black bg-muted/80 backdrop-blur-md sticky top-0 z-20 border-b border-border/50 tracking-widest">
+                {table.getHeaderGroups().map(headerGroup => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <th key={header.id} className="px-6 py-4 font-bold">
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {loading ? (
+                  <tr>
+                    <td colSpan={columns.length} className="text-center py-20">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="animate-spin text-primary" size={32} />
+                        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Fetching Assets...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : data.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length} className="text-center py-20 text-gray-500 group">
+                      <div className="flex flex-col items-center justify-center gap-4 opacity-50">
+                        <div className="p-6 bg-muted/50 rounded-full text-muted-foreground/30 ring-8 ring-muted/20">
+                          <Search size={48} strokeWidth={1} />
+                        </div>
+                        <p className="text-muted-foreground font-black uppercase tracking-widest text-xs">No assets found</p>
+                        <button
+                          onClick={() => { setSearch(''); setFilterType('ALL'); }}
+                          className="text-[10px] font-bold text-primary hover:underline uppercase tracking-wide"
+                        >
+                          Reset Filters
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  table.getRowModel().rows.map(row => {
+                    const assetType = (row.original.asset_type || 'DEFAULT').toUpperCase();
+                    const colors = NODE_COLORS[assetType] || NODE_COLORS['DEFAULT'];
 
-                  return (
-                    <tr
-                      key={row.id}
-                      onClick={() => handleRowClick(row.original)}
-                      className={`border-b hover:bg-gray-50 dark:hover:bg-zinc-800 cursor-pointer transition-colors ${selectedAsset?.asset_id === row.original.asset_id ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                      style={{ borderLeft: `4px solid ${colors.border}` }}
-                    >
-                      {row.getVisibleCells().map(cell => (
-                        <td key={cell.id} className="px-6 py-4 whitespace-nowrap">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                    return (
+                      <tr
+                        key={row.id}
+                        onClick={() => handleRowClick(row.original)}
+                        className={`hover:bg-primary/5 cursor-pointer transition-colors group ${selectedAsset?.asset_id === row.original.asset_id ? 'bg-primary/5' : ''}`}
+                      >
+                        {row.getVisibleCells().map(cell => (
+                          <td key={cell.id} className="px-6 py-4 whitespace-nowrap first:border-l-4" style={cell.column.id === 'asset_type' ? { borderLeftColor: colors.border } : {}}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-end gap-2 py-4">
-          <span className="text-sm text-gray-500">
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-          </span>
-          <button
-            className="border rounded px-2 py-1 text-sm disabled:opacity-50"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </button>
-          <button
-            className="border rounded px-2 py-1 text-sm disabled:opacity-50"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </button>
+          {/* Footer Pagination */}
+          <div className="p-4 border-t border-border/50 bg-muted/30 flex items-center justify-between">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            </span>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1.5 rounded-lg border border-border/50 bg-background hover:bg-muted text-[10px] font-bold uppercase tracking-wider disabled:opacity-50 transition-colors"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                Previous
+              </button>
+              <button
+                className="px-3 py-1.5 rounded-lg border border-border/50 bg-background hover:bg-muted text-[10px] font-bold uppercase tracking-wider disabled:opacity-50 transition-colors"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Side Panel: Details */}
       {selectedAsset && (
-        <div className="w-1/3 border-l bg-white dark:bg-zinc-900 overflow-y-auto p-6 shadow-xl z-10 transition-all duration-300">
-          <div className="flex justify-between items-start mb-6">
-            <h2 className="text-xl font-bold break-words w-full">{selectedAsset.name_display}</h2>
-            <button onClick={() => setSelectedAsset(null)} className="text-gray-400 hover:text-gray-600">
-              &times;
-            </button>
+        <div className="w-1/3 border border-border/50 bg-card/80 backdrop-blur-xl rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col animate-in slide-in-from-right-10 duration-500">
+          <div className="p-8 border-b border-border/50 bg-gradient-to-b from-muted/50 to-transparent">
+            <div className="flex justify-between items-start mb-4">
+              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground border border-border px-2 py-0.5 rounded-md bg-background/50">Details Inspector</span>
+              <button onClick={() => setSelectedAsset(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 hover:bg-background/50 rounded-full">
+                <X size={16} />
+              </button>
+            </div>
+            <h2 className="text-2xl font-black tracking-tight break-words w-full leading-tight">
+              {selectedAsset.name_display === 'Unknown' || !selectedAsset.name_display
+                ? (selectedAsset.asset_type + ': ' + selectedAsset.asset_id.slice(0, 8))
+                : selectedAsset.name_display}
+            </h2>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-bold text-muted-foreground">Active Asset</span>
+            </div>
           </div>
 
-          {detailsLoading ? (
-            <div className="flex justify-center py-10"><Loader2 className="animate-spin" /></div>
-          ) : details ? (
-            <div className="space-y-6">
-              {/* Business Intent (New) */}
-              {selectedAsset.tags?.business_intent && (
+          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            {detailsLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-2 opacity-50">
+                <Loader2 className="animate-spin text-primary" size={24} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Loading Metadata...</span>
+              </div>
+            ) : details ? (
+              <div className="space-y-8">
+                {/* Business Intent (New) */}
+                {selectedAsset.tags?.business_intent && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-primary uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Activity size={12} /> Business Intent
+                    </h3>
+                    <div className="bg-primary/5 p-5 rounded-2xl text-sm font-medium text-foreground border border-primary/10 italic leading-relaxed">
+                      "{selectedAsset.tags.business_intent}"
+                    </div>
+                  </div>
+                )}
+
+                {/* Transformation Logic (New for Tasks) */}
+                {selectedAsset.tags?.transformation_logic && (
+                  <div>
+                    <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <Code size={12} /> Transformation Logic
+                    </h3>
+                    <div className="bg-[#0d1117] p-5 rounded-2xl overflow-x-auto border border-white/5 shadow-inner group relative">
+                      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-white/10 text-[8px] text-white/40 font-mono uppercase">SQL</div>
+                      <pre className="text-[10px] text-blue-300 font-mono leading-relaxed whitespace-pre-wrap">
+                        {selectedAsset.tags.transformation_logic}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* Attributes & Columns */}
                 <div>
-                  <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <Activity size={14} /> Business Intent
+                  <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <Database size={12} /> Metadata & Schema
                   </h3>
-                  <div className="bg-primary/5 p-4 rounded-lg text-sm text-foreground border border-primary/10 italic">
-                    "{selectedAsset.tags.business_intent}"
+                  <div className="bg-background/50 border border-border/50 p-5 rounded-[1.5rem] text-sm space-y-3 shadow-sm">
+                    <div className="flex justify-between border-b border-border/30 pb-2">
+                      <span className="text-muted-foreground text-xs font-bold">Type</span>
+                      <span className="font-bold text-foreground text-xs">{selectedAsset.asset_type}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-border/30 pb-2">
+                      <span className="text-muted-foreground text-xs font-bold">System</span>
+                      <span className="font-bold font-mono text-xs bg-muted/50 px-1.5 py-0.5 rounded text-foreground">{selectedAsset.system || 'Unknown'}</span>
+                    </div>
+
+                    {/* Enhanced Columns Display */}
+                    {selectedAsset.tags?.columns && Array.isArray(selectedAsset.tags.columns) && (
+                      <div className="pt-2">
+                        <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block mb-3">Schema Definition</span>
+                        <ul className="space-y-2 list-none text-xs">
+                          {selectedAsset.tags.columns.map((col: any, i: number) => {
+                            const isObj = typeof col === 'object' && col !== null;
+                            return (
+                              <li key={i} className="pb-2 border-b border-border/30 last:border-0">
+                                <div className="font-bold text-foreground flex items-center justify-between">
+                                  {isObj ? col.name : col}
+                                  {isObj && col.type && <span className="text-[9px] text-muted-foreground font-mono bg-muted/50 px-1.5 rounded">{col.type}</span>}
+                                </div>
+                                {isObj && col.logic && (
+                                  <div className="text-muted-foreground mt-1 text-[10px] pl-2 border-l-2 border-primary/20">{col.logic}</div>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Clean attribute loop */}
+                    {selectedAsset.tags && Object.entries(selectedAsset.tags)
+                      .filter(([k]) => !['columns', 'transformation_logic', 'business_intent', 'business_rule'].includes(k))
+                      .map(([k, v]) => (
+                        <div key={k} className="flex justify-between pt-1">
+                          <span className="text-muted-foreground capitalize text-xs">{k}</span>
+                          <span className="font-medium text-xs truncate max-w-[150px]" title={String(v)}>{String(v)}</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
-              )}
 
-              {/* Transformation Logic (New for Tasks) */}
-              {selectedAsset.tags?.transformation_logic && (
+                {/* Relationships */}
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <Code size={14} /> Transformation Logic
-                  </h3>
-                  <div className="bg-slate-950 p-4 rounded-lg overflow-x-auto border border-white/10 shadow-inner">
-                    <pre className="text-xs text-blue-300 font-mono leading-relaxed whitespace-pre-wrap">
-                      {selectedAsset.tags.transformation_logic}
-                    </pre>
-                  </div>
-                </div>
-              )}
+                  <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Lineage Connections</h3>
 
-              {/* Attributes & Columns */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                  <Database size={14} /> Metadata & Schema
-                </h3>
-                <div className="bg-gray-50 dark:bg-zinc-800 p-3 rounded text-sm space-y-3">
-                  <div className="flex justify-between border-b border-border/50 pb-1">
-                    <span className="text-gray-500">Type:</span>
-                    <span className="font-medium">{selectedAsset.asset_type}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border/50 pb-1">
-                    <span className="text-gray-500">System:</span>
-                    <span className="font-medium">{selectedAsset.system || 'Unknown'}</span>
-                  </div>
-
-                  {/* Enhanced Columns Display */}
-                  {selectedAsset.tags?.columns && Array.isArray(selectedAsset.tags.columns) && (
-                    <div className="pt-2">
-                      <span className="text-gray-500 text-xs font-bold block mb-2">COLUMNS:</span>
-                      <ul className="space-y-2 list-none text-xs">
-                        {selectedAsset.tags.columns.map((col: any, i: number) => {
-                          const isObj = typeof col === 'object' && col !== null;
-                          return (
-                            <li key={i} className="pb-2 border-b border-border/30 last:border-0">
-                              <div className="font-bold text-foreground">
-                                {isObj ? col.name : col}
-                                {isObj && col.type && <span className="ml-1 text-[10px] text-muted-foreground uppercase">({col.type})</span>}
-                              </div>
-                              {isObj && col.logic && (
-                                <div className="text-muted-foreground mt-0.5 italic">{col.logic}</div>
-                              )}
-                              {isObj && col.source && (
-                                <div className="text-[10px] text-primary/70 font-mono mt-0.5">Src: {col.source}</div>
-                              )}
-                            </li>
-                          );
-                        })}
+                  {details.outgoing_edges?.length > 0 && (
+                    <div className="mb-4">
+                      <span className="text-[9px] font-bold text-blue-500 mb-2 block uppercase tracking-wide">Outgoing (Downstream)</span>
+                      <ul className="space-y-2">
+                        {details.outgoing_edges.map((edge: any) => (
+                          <li key={edge.edge_id} className="text-sm border border-border/50 p-3 rounded-xl bg-background/40 hover:bg-background hover:border-blue-500/30 transition-all flex justify-between items-center group">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">--[{edge.edge_type}]--&gt;</span>
+                              <span className="font-bold text-xs truncate">{edge.to_asset.name_display}</span>
+                            </div>
+                          </li>
+                        ))}
                       </ul>
                     </div>
                   )}
 
-                  {/* Other Tags */}
-                  {selectedAsset.tags && Object.entries(selectedAsset.tags)
-                    .filter(([k]) => !['columns', 'transformation_logic', 'business_intent', 'business_rule'].includes(k))
-                    .map(([k, v]) => (
-                      <div key={k} className="flex justify-between pt-1">
-                        <span className="text-gray-500 capitalize">{k}:</span>
-                        <span className="font-medium truncate max-w-[200px]" title={String(v)}>{String(v)}</span>
-                      </div>
-                    ))}
+                  {details.incoming_edges?.length > 0 && (
+                    <div>
+                      <span className="text-[9px] font-bold text-purple-500 mb-2 block uppercase tracking-wide">Incoming (Upstream)</span>
+                      <ul className="space-y-2">
+                        {details.incoming_edges.map((edge: any) => (
+                          <li key={edge.edge_id} className="text-sm border border-border/50 p-3 rounded-xl bg-background/40 hover:bg-background hover:border-purple-500/30 transition-all flex justify-between items-center group">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <span className="font-bold text-xs truncate">{edge.from_asset.name_display}</span>
+                              <span className="text-[9px] font-mono text-muted-foreground whitespace-nowrap">&lt;--[{edge.edge_type}]--</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
+
               </div>
-
-              {/* Relationships */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Relationships</h3>
-
-                {details.outgoing_edges?.length > 0 && (
-                  <div className="mb-4">
-                    <span className="text-xs font-medium text-blue-600 mb-1 block">Outgoing (Depends On / Writes To)</span>
-                    <ul className="space-y-2">
-                      {details.outgoing_edges.map((edge: any) => (
-                        <li key={edge.edge_id} className="text-sm border p-2 rounded hover:bg-gray-50 flex justify-between items-center group">
-                          <div>
-                            <span className="text-gray-500 text-xs mr-2">--[{edge.edge_type}]--&gt;</span>
-                            <span className="font-medium">{edge.to_asset.name_display}</span>
-                          </div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${edge.confidence > 0.7 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                            {Math.round(edge.confidence * 100)}%
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {details.incoming_edges?.length > 0 && (
-                  <div>
-                    <span className="text-xs font-medium text-purple-600 mb-1 block">Incoming (Used By)</span>
-                    <ul className="space-y-2">
-                      {details.incoming_edges.map((edge: any) => (
-                        <li key={edge.edge_id} className="text-sm border p-2 rounded hover:bg-gray-50 flex justify-between items-center">
-                          <div>
-                            <span className="font-medium">{edge.from_asset.name_display}</span>
-                            <span className="text-gray-500 text-xs ml-2">--[{edge.edge_type}]--&gt;</span>
-                          </div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${edge.confidence > 0.7 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                            {Math.round(edge.confidence * 100)}%
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {(!details.outgoing_edges?.length && !details.incoming_edges?.length) && (
-                  <p className="text-sm text-gray-400 italic">No relationships found.</p>
-                )}
-              </div>
-
-              {/* Evidence */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Evidence & Lineage</h3>
-                {details.evidences?.length > 0 ? (
-                  <div className="space-y-3">
-                    {details.evidences.map((item: any) => (
-                      <div key={item.evidence.evidence_id} className="border rounded p-3 bg-slate-50 dark:bg-zinc-800/50">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-mono bg-white border px-1 rounded">{item.evidence.kind}</span>
-                          <span className="text-xs text-gray-400">{item.evidence.file_path.split('/').pop()}</span>
-                        </div>
-                        {item.evidence.snippet && (
-                          <pre className="text-xs overflow-x-auto bg-gray-100 dark:bg-black p-2 rounded text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                            {item.evidence.snippet}
-                          </pre>
-                        )}
-                        {item.evidence.locator && (
-                          <div className="mt-1 text-[10px] text-gray-400">
-                            Lines: {item.evidence.locator.line_start}-{item.evidence.locator.line_end}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400 italic">No direct evidence snippets linked.</p>
-                )}
-              </div>
-
-            </div>
-          ) : (
-            <p className="text-red-500">Failed to load details.</p>
-          )}
+            ) : (
+              <p className="text-red-500 font-bold text-center text-xs uppercase tracking-widest">Failed to retrieve asset details.</p>
+            )}
+          </div>
         </div>
       )}
     </div>

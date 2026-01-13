@@ -25,6 +25,7 @@ interface SolutionCardProps {
     stats: any;
     onDelete: (id: string) => void;
     onReanalyze: (id: string, mode: 'full' | 'update') => void;
+    onCancel: (id: string) => void;
     processingId: string | null;
 }
 
@@ -35,6 +36,7 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
     stats,
     onDelete,
     onReanalyze,
+    onCancel,
     processingId
 }) => {
     const router = useRouter();
@@ -166,6 +168,14 @@ export const SolutionCard: React.FC<SolutionCardProps> = ({
                             >
                                 REVIEW EXECUTION PLAN
                             </Link>
+                        )}
+                        {isProcessing && !isPlanning && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onCancel(solution.id); }}
+                                className="w-full mt-3 block text-center bg-red-500/10 text-red-500 text-[10px] font-black py-2.5 rounded-xl hover:bg-red-500/20 transition-all uppercase tracking-widest border border-red-500/20"
+                            >
+                                Stop Analysis
+                            </button>
                         )}
                     </div>
                 ) : (

@@ -1,0 +1,63 @@
+name: OpenRouter Extreme (DeepSeek + Gemini 2.5)
+provider: providers/openrouter.yml
+actions:
+  planner.classifier:
+    model: google/gemini-2.5-flash-lite
+    temperature: 0.1
+    max_tokens: 1000
+  extract.schema:
+    model: deepseek/deepseek-v3.2
+    prompt_file: prompts/extract_sql.md
+    temperature: 0.0
+    max_tokens: 8000
+  extract.lineage.package:
+    model: deepseek/deepseek-v3.2
+    prompt_file: prompts/extract_strict.md
+    temperature: 0.0
+    max_tokens: 16000
+  extract.python:
+    model: deepseek/deepseek-v3.2
+    prompt_file: prompts/extract_python.md
+    temperature: 0.0
+    max_tokens: 16000
+  extract.strict:
+    model: deepseek/deepseek-v3.2
+    prompt_file: prompts/extract_strict.md
+    temperature: 0.0
+    max_tokens: 16000
+  summarize.asset:
+    model: google/gemini-2.5-flash-lite
+    temperature: 0.2
+  qa.chat:
+    model: google/gemini-2.5-flash-lite
+    temperature: 0.5
+  extract.deep_dive:
+    model: deepseek/deepseek-v3.2
+    prompt_file: prompts/extract_deep_dive.md
+    temperature: 0.0
+    max_tokens: 8000
+  extract.lineage.sql:
+    model: deepseek/deepseek-v3.2
+    temperature: 0.1
+    max_tokens: 8000
+  generate.dbt:
+    model: deepseek/deepseek-v3.2
+    temperature: 0.3
+    max_tokens: 4000
+  reasoning.architect:
+    model: deepseek/deepseek-v3.2
+    temperature: 0.3
+    max_tokens: 4000
+  expert.report:
+    model: deepseek/deepseek-v3.2
+    temperature: 0.3
+    max_tokens: 8000
+  action.analyze_iteration:
+    model: deepseek/deepseek-v3.2
+    temperature: 0.3
+    max_tokens: 4000
+  extract.diagram:
+    model: google/gemini-2.5-flash-lite
+    prompt_file: prompts/extract_diagram.md
+    temperature: 0.1
+    max_tokens: 4096

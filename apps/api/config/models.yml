@@ -85,6 +85,16 @@ actions:
     timeout_ms: 60000
     description: "Análisis de transformaciones SQL (DML)"
 
+  # Analysis of Diagrams and Images - VLM
+  extract_diagram:
+    model: "google/gemini-flash-1.5"
+    provider: "openrouter"
+    prompt_file: "prompts/extract_diagram.md"
+    temperature: 0.1
+    max_tokens: 4096
+    timeout_ms: 60000
+    description: "Vision Analysis of Entity-Relationship Diagrams and Documentation Images"
+
 # Cadenas de fallback (usando modelos más pequeños de Groq si el grande falla o timeout)
 fallbacks:
   extract_strict:

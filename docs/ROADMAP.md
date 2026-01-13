@@ -1,4 +1,4 @@
-# DiscoverAI - Roadmap & Release Strategy
+# DiggerAI - Roadmap & Release Strategy
 
 ## ✅ Released: v6.0 "Immersive Intelligence"
 La versión de cierre para el ciclo "Reasoning & Governance".
@@ -34,4 +34,4 @@ Enfocado en granularidad, integraciones nativas y escala masiva.
 - **Processing Scale:** ZIP files >50MB may experience UI timeouts while processing. (Status: Optimization scheduled for v5.1).
 
 ---
-© 2025 DiscoverAI
+© 2026 DiggerAI

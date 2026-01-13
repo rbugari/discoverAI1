@@ -123,6 +123,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCancel = async (id: string) => {
+    setProcessingId(id);
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/solutions/${id}/cancel`);
+      alert("Analysis cancelled.");
+      fetchSolutions();
+    } catch (error) {
+      console.error("Cancel failed", error);
+      alert("Failed to cancel analysis");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
   return (
     <div className="p-6 lg:pl-4 lg:pr-12 lg:py-12 min-h-screen relative overflow-hidden bg-background">
       {/* Extreme Premium Background Decorative Elements */}
@@ -186,6 +200,7 @@ export default function DashboardPage() {
               stats={stats[sol.id]}
               onDelete={handleDelete}
               onReanalyze={handleReanalyze}
+              onCancel={handleCancel}
               processingId={processingId}
             />
           ))}

@@ -34,21 +34,26 @@ Return valid JSON only, following this structure:
       "component_id": "temp_id_1",
       "name": "Component Name",
       "type": "Source|Transformation|Target",
-      "logic_raw": "Specific code/query snippet",
+      "subtype": "Sort|Lookup|DerivedColumn|etc",
+      "logic_raw": "SORT BY 'CustomerKey' ASC",
       "source_mapping": [{ "asset_name": "table_a", "columns": ["col1", "col2"] }],
-      "target_mapping": [{ "asset_name": "table_b", "columns": ["colx"] }]
+      "target_mapping": [{ "asset_name": "table_b", "columns": ["colx"] }],
+      "data_flow": {
+         "inputs": ["name_of_the_component_feeding_this_one"],
+         "outputs": ["name_of_the_component_this_feeds_into"]
+      }
     }
   ],
   "transformations": [
     {
       "ir_id": "temp_ir_1",
-      "source_component_id": "temp_id_1",
-      "operation": "FILTER|JOIN|AGGREGATE|DERIVE",
-      "logic_summary": "Filter records where status='A'",
+      "related_component_id": "temp_id_1",
+      "operation": "SORT",
+      "logic_summary": "Sorts the dataset by CustomerID in Ascending order coming from QueryX",
+      "business_explanation": "Ensures customer records are ordered before the Merge Join step.",
       "metadata": {
-        "expressions": "...",
-        "input_cols": ["..."],
-        "output_cols": ["..."]
+        "sort_keys": ["CustomerID"],
+        "order": "ASC"
       }
     }
   ],
@@ -74,6 +79,8 @@ Return valid JSON only, following this structure:
 ```
 
 ## Critical Rules
+- **Connect the Dots**: Every transformation MUST have an input source and an output target. Do not leave "floating" nodes like "Sort" or "Filter" without specifying WHERE the data comes from and WHERE it goes.
+- **Explain the Logic**: If you find a "Sort" or "Filter", explicitly state the criteria (e.g., "Sort by CustomerID ASC").
 - **Asset Naming**: For `source_asset_name` and `target_asset_name`, you MUST use the exact `name` of one of the provided `Macro Nodes` if applicable. Do not invent new names if the table is already listed.
 - **Prefixing**: If you cannot find the asset in macro nodes, use the best available name. If it's a qualified table name, include the schema (e.g., `dbo.MyTable`).
 - **No Technical Hallucinations**: If you can't find a table name, do not invent one.

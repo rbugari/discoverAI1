@@ -68,7 +68,9 @@ class DiscoveryAuditor:
             # Check for package enrichment
             documented_count = len(packages) # Basic fallback if packages exist
             
-        coverage_score = (documented_count / len(functional_assets)) * 100 if functional_assets else 0.0
+        raw_score = (documented_count / len(functional_assets)) * 100 if functional_assets else 0.0
+        coverage_score = min(raw_score, 100.0)
+        
         if not functional_assets and packages: coverage_score = 100.0 # If only packages exist
         
         # 3. Identify Gaps

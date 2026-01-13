@@ -97,7 +97,7 @@ class ModelRouter:
             # Fallback dinámico si la acción no está en el YAML pero queremos ejecutarla
             print(f"[ROUTER] Warning: Action '{action_name}' not in config. Using defaults.")
             # Standard model IDs for fallback
-            default_model = "google/gemini-3-flash-preview" if self.provider_name == "openrouter" else "llama-3.3-70b-versatile"
+            default_model = "google/gemini-2.5-flash-lite" if self.provider_name == "openrouter" else "llama-3.3-70b-versatile"
             action_cfg = {
                 "model": default_model,
                 "prompt_file": f"prompts/{action_name.replace('.', '_')}.md" # Map dot to underscore for prompt files

@@ -41,42 +41,54 @@ class LLMAdapter:
         messages: list,
         temperature: float = 0.1,
         max_tokens: int = 1800,
-        provider: str = None
+        provider: str = None,
+        json_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Llamada unificada a LLM. Despacha al proveedor correcto.
         """
-        provider = provider or settings.LLM_PROVIDER
+        # --- MULTI-MODAL NORMALIZATION ---
+        # Ensure 'messages' is in the format expected by the chosen provider.
+        # OpenAI/OpenRouter support list of parts in 'content'. Groq varies.
+        
+        if provider is None:
+            # AUTO-DETECT: If model has a slash (e.g. google/gemini), it's likely an OpenRouter model
+            if "/" in model:
+                provider = "openrouter"
+            else:
+                provider = settings.LLM_PROVIDER
         
         if provider == "groq":
-            return self.call_groq(model, messages, temperature, max_tokens)
+            return self.call_groq(model, messages, temperature, max_tokens, json_mode=json_mode)
         else:
-            return self.call_openrouter(model, messages, temperature, max_tokens)
+            return self.call_openrouter(model, messages, temperature, max_tokens, json_mode=json_mode)
 
     def call_groq(
         self,
         model: str,
         messages: list,
         temperature: float = 0.1,
-        max_tokens: int = 1800
+        max_tokens: int = 1800,
+        json_mode: bool = False
     ) -> Dict[str, Any]:
         """Llamada a Groq"""
         try:
             client = self._get_groq_client()
-            start_time = time.time()
             
-            # Groq no soporta todos los parámetros, pero estos son estándar
+            # NOTE: Groq specifically might NOT support images in all models yet.
+            # We assume 'messages' are already pre-formatted or handled.
+            
             completion = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stream=False
+                stream=False,
+                response_format={"type": "json_object"} if json_mode else None
             )
             
             content = completion.choices[0].message.content
             
-            # Estimación de tokens (Groq devuelve usage metadata generalmente)
             usage = completion.usage
             tokens_in = usage.prompt_tokens if usage else 0
             tokens_out = usage.completion_tokens if usage else 0
@@ -90,9 +102,7 @@ class LLMAdapter:
             }
             
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"[LLM ADAPTER] Groq Error: {e}\n{error_details}")
+            print(f"[LLM ADAPTER] Groq Error: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -105,9 +115,10 @@ class LLMAdapter:
         model: str,
         messages: list,
         temperature: float = 0.1,
-        max_tokens: int = 1800
+        max_tokens: int = 2500, # Vision tasks often need more tokens for output
+        json_mode: bool = False
     ) -> Dict[str, Any]:
-        """Llamada a OpenRouter (con reintentos para 429)"""
+        """Llamada a OpenRouter (soporta Multi-modal nativamente si el modelo lo permite)"""
         max_retries = 3
         retry_delay = 5 # seconds
         
@@ -123,7 +134,8 @@ class LLMAdapter:
                     model=model,
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"} if json_mode else None
                 )
                 
                 content = completion.choices[0].message.content
@@ -142,7 +154,7 @@ class LLMAdapter:
                 if "429" in error_str and attempt < max_retries - 1:
                     print(f"[LLM ADAPTER] Rate limit (429) hit. Retrying in {retry_delay}s... (Attempt {attempt+1}/{max_retries})")
                     time.sleep(retry_delay)
-                    retry_delay *= 2 # Exponential backoff
+                    retry_delay *= 2 
                     continue
                     
                 print(f"[LLM ADAPTER] OpenRouter Error: {e}")

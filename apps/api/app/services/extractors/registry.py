@@ -3,12 +3,14 @@ from .base import BaseExtractor
 from .llm import LLMExtractor
 from .regex import RegexExtractor
 from .sql_glot import SqlGlotExtractor
+from .ssis_deep import SSISDeepExtractor
 
 class ExtractorRegistry:
     def __init__(self):
         self.llm_extractor = LLMExtractor()
         self.regex_extractor = RegexExtractor()
         self.sql_extractor = SqlGlotExtractor()
+        self.ssis_extractor = SSISDeepExtractor()
         
     def get_extractor(self, file_path: str) -> BaseExtractor:
         """
@@ -18,6 +20,8 @@ class ExtractorRegistry:
         
         if ext == '.sql':
             return self.sql_extractor
+        elif ext == '.dtsx':
+            return self.ssis_extractor  # Use deep extractor for SSIS
             
         # For other files (py, xml, etc), we still use LLM for now as it's more versatile 
         # until we implement AST parsers for Python.
